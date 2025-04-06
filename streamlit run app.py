@@ -2,7 +2,6 @@
 import streamlit as st
 import openai
 import os
-import json
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -17,80 +16,26 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for SMS-like interface
+# Custom CSS for better appearance 
 st.markdown("""
 <style>
     .stApp {
         max-width: 100%;
     }
-    .main .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
-        max-width: 600px;
-    }
-    .stTextInput > div > div > input {
+    .stChatMessage {
         padding: 0.5rem;
-        border-radius: 20px;
+    }
+    .stChatMessageContent {
+        border-radius: 20px !important;
     }
     .stButton > button {
-        width: 100%;
         border-radius: 20px;
         padding: 0.3rem;
-        background-color: #FF69B4;
-        color: white;
-    }
-    .chat-message {
-        padding: 0.8rem;
-        border-radius: 18px;
-        margin-bottom: 0.8rem;
-        max-width: 85%;
-        word-wrap: break-word;
-    }
-    .chat-message.user {
-        background-color: #E5E5EA;
-        margin-left: auto;
-        border-bottom-right-radius: 5px;
-    }
-    .chat-message.assistant {
-        background-color: #DCF8C6;
-        margin-right: auto;
-        border-bottom-left-radius: 5px;
-    }
-    .chat-timestamp {
-        font-size: 0.7rem;
-        color: #888;
-        margin-top: 4px;
-        text-align: right;
     }
     .clinic-link {
         color: #0078ff;
         text-decoration: underline;
         cursor: pointer;
-    }
-    .input-row {
-        display: flex;
-        align-items: center;
-    }
-    .quick-replies {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        margin-top: 0.5rem;
-    }
-    .quick-reply-btn {
-        background-color: #E5E5EA;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        font-size: 0.9rem;
-        cursor: pointer;
-    }
-    .quick-reply-btn:hover {
-        background-color: #D1D1D6;
-    }
-    .user-name {
-        font-weight: bold;
-        color: #333;
     }
     .header-section {
         display: flex;
@@ -119,20 +64,18 @@ st.markdown("""
         font-size: 0.8rem;
         opacity: 0.8;
     }
-    .footer-input {
-        position: sticky;
-        bottom: 0;
-        background-color: white;
-        padding: 1rem 0;
-        margin-top: 1rem;
-        border-top: 1px solid #E5E5EA;
-    }
     .disclaimer {
         font-size: 0.7rem;
         color: #888;
         font-style: italic;
         text-align: center;
         margin-top: 1rem;
+    }
+    div[data-testid="stHorizontalBlock"] {
+        gap: 5px;
+    }
+    div[data-testid="stHorizontalBlock"] button {
+        margin: 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -160,6 +103,8 @@ if 'show_clinic_info' not in st.session_state:
     st.session_state.show_clinic_info = False
 if 'alternate_location' not in st.session_state:
     st.session_state.alternate_location = ""
+if 'waiting_for_input' not in st.session_state:
+    st.session_state.waiting_for_input = True
 if 'clinic_recommendations' not in st.session_state:
     st.session_state.clinic_recommendations = {
         "Pune": [
@@ -230,8 +175,13 @@ with st.sidebar:
     demo_scenario = st.selectbox(
         "Demo Scenario",
         ["Basic Screening Recommendation", "Test Results Follow-up", "Location Change"],
-        index=0
+        index=0,
+        key="demo_scenario_select"
     )
+    
+    st.write("Debug Info:")
+    st.write(f"Conversation stage: {st.session_state.conv_stage}")
+    st.write(f"Age: {st.session_state.user_profile['age']}")
     
     if st.button("Reset Conversation"):
         st.session_state.messages = []
@@ -248,6 +198,7 @@ with st.sidebar:
         st.session_state.quick_replies = []
         st.session_state.show_clinic_info = False
         st.session_state.alternate_location = ""
+        st.session_state.waiting_for_input = True
         st.rerun()
 
 # Function to update conversation stage and send the next message
@@ -262,7 +213,7 @@ def update_conversation():
     # Initial greeting
     if current_stage == "intro":
         message = f"Hi {name}, this is your health assistant. Sameera, your community health worker, recommended I reach out to you. I want to help you understand the recommended preventative healthcare you should have completed. Are you interested? It does not cost anything and I can help you find the right place and resources."
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "ask_interest"
         st.session_state.quick_replies = ["Yes", "No"]
         return
@@ -270,7 +221,7 @@ def update_conversation():
     # Ask for age after confirming interest
     elif current_stage == "ask_age":
         message = "Great, let's start with a few questions. First, how old are you?"
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "waiting_age"
         st.session_state.quick_replies = ["30", "40", "50", "60+"]
         return
@@ -278,7 +229,7 @@ def update_conversation():
     # Ask about annual checkup
     elif current_stage == "ask_annual_checkup":
         message = "Ok great. Have you had a doctor or nurse give you an exam in the last year for something unrelated to feeling sick?"
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "waiting_annual_checkup"
         st.session_state.quick_replies = ["Yes", "No"]
         return
@@ -286,7 +237,7 @@ def update_conversation():
     # Ask about cervical cancer screening
     elif current_stage == "ask_cervical_screening":
         message = "Have you had a cervical cancer screening test in the past 5 years?"
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "waiting_cervical_screening"
         st.session_state.quick_replies = ["Yes", "No", "I don't know"]
         return
@@ -294,7 +245,7 @@ def update_conversation():
     # Ask about breast cancer screening
     elif current_stage == "ask_breast_screening":
         message = "Have you had a breast cancer screening test in the past 5 years?"
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "waiting_breast_screening"
         st.session_state.quick_replies = ["Yes", "No", "I don't know"]
         return
@@ -345,7 +296,7 @@ def update_conversation():
             message = f"{name}, based on your answers, you should schedule {', '.join(recommendations)}. However, I don't have clinic information for your area. Please contact your local community health worker for assistance."
             st.session_state.quick_replies = ["OK, I will", "I need help finding a clinic"]
         
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "post_recommendation"
         st.session_state.show_clinic_info = True
         return
@@ -353,7 +304,7 @@ def update_conversation():
     # Follow-up test results demo
     elif current_stage == "test_results_followup":
         message = f"{name}, St. Mary's clinic notified me that your cervical cancer results came back and require follow-up, that may include treatment. The doctor requested you come back for another appointment. Do you need help scheduling? What questions do you have?"
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "waiting_results_response"
         st.session_state.quick_replies = ["I need help scheduling", "What does this mean?", "How much will it cost?"]
         return
@@ -365,7 +316,7 @@ def update_conversation():
         
         message = f"First, you need to go back to clinic to discuss your results. Your doctor may give you some simple antibiotic pills if it's an infection, or do some more tests or treatment for cervical cancer. You can go to <span class='clinic-link'>{clinic1['name']}</span>, and the price is ₹{clinic1['cost']['treatment']}, or you can go to <span class='clinic-link'>{clinic2['name']}</span>, and the price is ₹{clinic2['cost']['treatment']} if you do need treatment. Do you want to learn more about what to expect from your results meeting and what treatment could mean?"
         
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "waiting_treatment_questions"
         st.session_state.quick_replies = ["Yes, tell me more", "I'm not in Pune anymore", "I can't afford this"]
         return
@@ -376,7 +327,7 @@ def update_conversation():
         
         message = f"Got it. In that case, I suggest you go to <span class='clinic-link'>{alternate_clinic['name']}</span>, their price is ₹{alternate_clinic['cost']['treatment']}. Note there are fewer clinics in this area so it's more expensive, and the time to get an appointment can be longer."
         
-        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.messages.append({"role": "assistant", "content": message})
         st.session_state.conv_stage = "post_location_change"
         st.session_state.quick_replies = ["Thanks, I'll call them", "Can I get financial assistance?", "How urgent is this?"]
         return
@@ -396,11 +347,27 @@ def process_user_response(response):
     # Process age response
     elif current_stage == "waiting_age":
         try:
-            age = int(''.join(filter(str.isdigit, response)))
-            st.session_state.user_profile["age"] = age
-            st.session_state.conv_stage = "ask_annual_checkup"
-        except:
-            return "I didn't understand that age. Please enter your age as a number."
+            # First check if it's one of our quick reply options
+            if response in ["30", "40", "50", "60+"]:
+                age = int(response.replace("+", ""))
+                st.session_state.user_profile["age"] = age
+                st.session_state.conv_stage = "ask_annual_checkup"
+                return None
+            
+            # Otherwise try to extract numbers from the response
+            digits = ''.join(filter(str.isdigit, response))
+            if digits:
+                age = int(digits)
+                if 18 <= age <= 120:  # Reasonable age range
+                    st.session_state.user_profile["age"] = age
+                    st.session_state.conv_stage = "ask_annual_checkup"
+                    return None
+            
+            # If we got here, we couldn't parse the age
+            return "I didn't understand that age. Please enter your age as a number between 18-120, or use one of the buttons below."
+        except Exception as e:
+            st.sidebar.error(f"Error processing age: {str(e)}")
+            return "There was a problem with your age input. Please try entering just the number, like '45'."
     
     # Process annual checkup response
     elif current_stage == "waiting_annual_checkup":
@@ -442,6 +409,21 @@ def process_user_response(response):
     # No specific handling needed for other stages
     return None
 
+# Function to handle quick reply buttons
+def handle_quick_reply(reply):
+    st.session_state.messages.append({"role": "user", "content": reply})
+    
+    # Process response
+    response_message = process_user_response(reply)
+    if response_message:
+        st.session_state.messages.append({"role": "assistant", "content": response_message})
+    else:
+        update_conversation()
+    
+    # Clear quick replies
+    st.session_state.quick_replies = []
+    st.rerun()
+
 # App header
 st.markdown("""
 <div class="header-section">
@@ -454,7 +436,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Handle demo scenario selection
-demo_scenario = st.session_state.get("demo_scenario", "Basic Screening Recommendation")
+demo_scenario = st.session_state.get("demo_scenario_select", "Basic Screening Recommendation")
 if len(st.session_state.messages) == 0:
     if demo_scenario == "Test Results Follow-up":
         # Set up profile for test results scenario
@@ -485,58 +467,41 @@ if len(st.session_state.messages) == 0:
 if len(st.session_state.messages) == 0:
     update_conversation()
 
-# Display chat history
-for i, message in enumerate(st.session_state.messages):
-    with st.container():
-        st.markdown(f"""
-        <div class="chat-message {message['role']}">
-            {message['content']}
-            <div class="chat-timestamp">{message.get('time', '12:00')}</div>
-        </div>
-        """, unsafe_allow_html=True)
+# Display chat messages using Streamlit's built-in components
+for message in st.session_state.messages:
+    if message["role"] == "assistant":
+        with st.chat_message("assistant", avatar="💜"):
+            st.markdown(message["content"], unsafe_allow_html=True)
+    else:
+        with st.chat_message("user", avatar="👤"):
+            st.write(message["content"])
 
-# Display quick replies if available
+# Display quick reply buttons if available
 if st.session_state.quick_replies and len(st.session_state.quick_replies) > 0:
-    st.markdown('<div class="quick-replies">', unsafe_allow_html=True)
+    # Create columns based on the number of quick replies
     cols = st.columns(min(len(st.session_state.quick_replies), 3))
+    
+    # Add buttons to each column
     for i, reply in enumerate(st.session_state.quick_replies):
         col_idx = i % len(cols)
-        if cols[col_idx].button(reply, key=f"qr_{i}"):
-            # Add user message
-            st.session_state.messages.append({"role": "user", "content": reply, "time": datetime.now().strftime("%H:%M")})
-            
-            # Process response
-            response_message = process_user_response(reply)
-            if response_message:
-                st.session_state.messages.append({"role": "assistant", "content": response_message, "time": datetime.now().strftime("%H:%M")})
-            else:
-                update_conversation()
-            
-            # Clear quick replies
-            st.session_state.quick_replies = []
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+        if cols[col_idx].button(reply, key=f"qr_{reply}_{i}"):
+            handle_quick_reply(reply)
 
-# User input area
-with st.container():
-    st.markdown('<div class="footer-input">', unsafe_allow_html=True)
-    user_input = st.text_input("Type a message...", key="user_input")
+# Chat input using Streamlit's chat_input
+if prompt := st.chat_input("Type a message..."):
+    # Add user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
     
-    if user_input:
-        # Add user message
-        st.session_state.messages.append({"role": "user", "content": user_input, "time": datetime.now().strftime("%H:%M")})
-        
-        # Process response
-        response_message = process_user_response(user_input)
-        if response_message:
-            st.session_state.messages.append({"role": "assistant", "content": response_message, "time": datetime.now().strftime("%H:%M")})
-        else:
-            update_conversation()
-        
-        # Clear quick replies
-        st.session_state.quick_replies = []
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Process response
+    response_message = process_user_response(prompt)
+    if response_message:
+        st.session_state.messages.append({"role": "assistant", "content": response_message})
+    else:
+        update_conversation()
+    
+    # Clear quick replies and rerun
+    st.session_state.quick_replies = []
+    st.rerun()
 
 # Display disclaimer
 st.markdown("""
