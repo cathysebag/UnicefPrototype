@@ -2,6 +2,10 @@ import streamlit as st
 import openai
 import os
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables (for local development)
+load_dotenv()
 
 # Set page configuration for better mobile experience
 st.set_page_config(
@@ -119,10 +123,21 @@ def generate_response(prompt, history):
     except Exception as e:
         return f"An error occurred: {str(e)}"
 
-# API key input in sidebar
+# Set API key from environment or secrets if available
+try:
+    # Try to get from Streamlit secrets (preferred for deployment)
+    openai.api_key = st.secrets["openai"]["api_key"]
+    st.session_state.openai_api_key = openai.api_key
+except:
+    # If not in secrets, try environment variable
+    if os.getenv("OPENAI_API_KEY"):
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        st.session_state.openai_api_key = openai.api_key
+
+# API key input in sidebar (as backup or for user's own key)
 with st.sidebar:
     st.header("Configuration")
-    api_key = st.text_input("Enter your OpenAI API key", type="password")
+    api_key = st.text_input("Enter your OpenAI API key (optional if configured in deployment)", type="password")
     if api_key:
         st.session_state.openai_api_key = api_key
         openai.api_key = api_key
