@@ -1,376 +1,552 @@
-// Women's Health Navigator Chatbot
-// This chatbot helps women understand preventive healthcare recommendations
-// with a focus on cervical cancer screening, HPV vaccination, and other women's health services
+# Women's Health Navigator Chatbot
+import streamlit as st
+import openai
+import os
+import json
+from datetime import datetime
+from dotenv import load_dotenv
 
-class HealthNavigatorBot {
-  constructor() {
-    this.userData = {
-      name: "",
-      age: 0,
-      location: "",
-      lastScreeningDate: null,
-      lastCheckup: null,
-      screeningHistory: {
-        cervical: false,
-        breast: false
-      },
-      hpvVaccinated: false,
-      symptoms: [],
-      riskFactors: []
-    };
+# Load environment variables (for local development)
+load_dotenv()
+
+# Set page configuration for better mobile experience
+st.set_page_config(
+    page_title="Women's Health Navigator",
+    page_icon="💜",
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
+
+# Custom CSS for SMS-like interface
+st.markdown("""
+<style>
+    .stApp {
+        max-width: 100%;
+    }
+    .main .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+        max-width: 600px;
+    }
+    .stTextInput > div > div > input {
+        padding: 0.5rem;
+        border-radius: 20px;
+    }
+    .stButton > button {
+        width: 100%;
+        border-radius: 20px;
+        padding: 0.3rem;
+        background-color: #FF69B4;
+        color: white;
+    }
+    .chat-message {
+        padding: 0.8rem;
+        border-radius: 18px;
+        margin-bottom: 0.8rem;
+        max-width: 85%;
+        word-wrap: break-word;
+    }
+    .chat-message.user {
+        background-color: #E5E5EA;
+        margin-left: auto;
+        border-bottom-right-radius: 5px;
+    }
+    .chat-message.assistant {
+        background-color: #DCF8C6;
+        margin-right: auto;
+        border-bottom-left-radius: 5px;
+    }
+    .chat-timestamp {
+        font-size: 0.7rem;
+        color: #888;
+        margin-top: 4px;
+        text-align: right;
+    }
+    .clinic-link {
+        color: #0078ff;
+        text-decoration: underline;
+        cursor: pointer;
+    }
+    .input-row {
+        display: flex;
+        align-items: center;
+    }
+    .quick-replies {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+    .quick-reply-btn {
+        background-color: #E5E5EA;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        cursor: pointer;
+    }
+    .quick-reply-btn:hover {
+        background-color: #D1D1D6;
+    }
+    .user-name {
+        font-weight: bold;
+        color: #333;
+    }
+    .header-section {
+        display: flex;
+        align-items: center;
+        padding: 0.7rem 1rem;
+        background-color: #075E54;
+        color: white;
+        border-radius: 10px 10px 0 0;
+        margin-bottom: 1rem;
+    }
+    .header-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: #128C7E;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1rem;
+        font-size: 1.2rem;
+    }
+    .header-title {
+        font-weight: bold;
+    }
+    .header-subtitle {
+        font-size: 0.8rem;
+        opacity: 0.8;
+    }
+    .footer-input {
+        position: sticky;
+        bottom: 0;
+        background-color: white;
+        padding: 1rem 0;
+        margin-top: 1rem;
+        border-top: 1px solid #E5E5EA;
+    }
+    .disclaimer {
+        font-size: 0.7rem;
+        color: #888;
+        font-style: italic;
+        text-align: center;
+        margin-top: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Initialize session state variables
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+if 'openai_api_key' not in st.session_state:
+    st.session_state.openai_api_key = ""
+if 'conv_stage' not in st.session_state:
+    st.session_state.conv_stage = "intro"
+if 'user_profile' not in st.session_state:
+    st.session_state.user_profile = {
+        "name": "",
+        "age": 0,
+        "location": "Pune",
+        "annual_checkup": None,
+        "cervical_screening": None,
+        "breast_screening": None,
+        "current_location": "Pune"
+    }
+if 'quick_replies' not in st.session_state:
+    st.session_state.quick_replies = []
+if 'show_clinic_info' not in st.session_state:
+    st.session_state.show_clinic_info = False
+if 'alternate_location' not in st.session_state:
+    st.session_state.alternate_location = ""
+if 'clinic_recommendations' not in st.session_state:
+    st.session_state.clinic_recommendations = {
+        "Pune": [
+            {
+                "name": "St. Mary's Health Center",
+                "address": "200 Example Road, Pune",
+                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                "phone": "123-456-7880",
+                "cost": {"cervical_cancer_screening": 0, "breast_cancer_screening": 0, "annual_checkup": 0, "treatment": 15},
+                "notes": "Free screenings available. Open Saturdays for working women."
+            },
+            {
+                "name": "Women's Wellness Clinic",
+                "address": "45 Health Avenue, Pune",
+                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                "phone": "123-555-9090",
+                "cost": {"cervical_cancer_screening": 0, "breast_cancer_screening": 0, "annual_checkup": 0, "treatment": 18},
+                "notes": "Specializes in women's health. Female doctors available."
+            }
+        ],
+        "Pipili": [
+            {
+                "name": "Pipili Community Hospital",
+                "address": "78 Main Street, Pipili",
+                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                "phone": "987-654-3210",
+                "cost": {"cervical_cancer_screening": 5, "breast_cancer_screening": 5, "annual_checkup": 10, "treatment": 20},
+                "notes": "Limited appointment availability. Call ahead."
+            }
+        ]
+    }
+
+# Configure API key from secrets or environment
+try:
+    # Try different secret formats
+    if "OPENAI_API_KEY" in st.secrets:
+        openai.api_key = st.secrets["OPENAI_API_KEY"]
+        st.session_state.openai_api_key = openai.api_key
+    elif "openai" in st.secrets and "api_key" in st.secrets["openai"]:
+        openai.api_key = st.secrets["openai"]["api_key"]
+        st.session_state.openai_api_key = openai.api_key
+    elif os.getenv("OPENAI_API_KEY"):
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+        st.session_state.openai_api_key = openai.api_key
+except Exception as e:
+    pass  # Silently fail, will handle API key input if needed
+
+# API key input in sidebar
+with st.sidebar:
+    st.header("Configuration")
+    api_key = st.text_input("Enter your OpenAI API key (if not configured)", type="password")
+    if api_key:
+        st.session_state.openai_api_key = api_key
+        openai.api_key = api_key
     
-    this.clinics = {
-      "Pune": [
-        {
-          name: "FOGSI Women's Health Center - Pune",
-          address: "Near Jehangir Hospital, Pune, Maharashtra",
-          services: ["cervical_cancer_screening", "breast_cancer_screening", "prenatal_care", "sti_testing"],
-          phone: "+91-20-12345678",
-          cost: "Free for basic screening",
-          distance: "2.5 km"
-        },
-        {
-          name: "Maternal Health Clinic - Shivajinagar",
-          address: "Shivajinagar, Pune, Maharashtra",
-          services: ["prenatal_care", "postnatal_care", "family_planning", "cervical_cancer_screening"],
-          phone: "+91-20-87654321",
-          cost: "₹200 for HPV testing",
-          distance: "3.8 km"
-        },
-        {
-          name: "Women's Wellness Center",
-          address: "Koregaon Park, Pune, Maharashtra",
-          services: ["general_wellness", "cervical_cancer_screening", "breast_cancer_screening", "sti_testing"],
-          phone: "+91-20-23456789",
-          cost: "₹150 for VIA testing",
-          distance: "5.1 km"
+    # User name input (for demo)
+    if not st.session_state.user_profile["name"]:
+        user_name = st.text_input("Enter your name (for demo)")
+        if user_name:
+            st.session_state.user_profile["name"] = user_name
+            # Reset conversation to use the name
+            if len(st.session_state.messages) <= 1:  # Only if conversation just started
+                st.session_state.messages = []
+                st.session_state.conv_stage = "intro"
+                st.rerun()
+    
+    # Demo mode selector
+    demo_scenario = st.selectbox(
+        "Demo Scenario",
+        ["Basic Screening Recommendation", "Test Results Follow-up", "Location Change"],
+        index=0
+    )
+    
+    if st.button("Reset Conversation"):
+        st.session_state.messages = []
+        st.session_state.conv_stage = "intro"
+        st.session_state.user_profile = {
+            "name": st.session_state.user_profile["name"],  # Keep the name
+            "age": 0,
+            "location": "Pune",
+            "annual_checkup": None,
+            "cervical_screening": None,
+            "breast_screening": None,
+            "current_location": "Pune"
         }
-      ],
-      "Pipili": [
-        {
-          name: "District Hospital Pipili",
-          address: "Main Road, Pipili, Odisha",
-          services: ["cervical_cancer_screening", "general_healthcare"],
-          phone: "+91-6758-223456",
-          cost: "₹300 for follow-up treatment",
-          distance: "1.2 km"
-        },
-        {
-          name: "Community Health Center",
-          address: "Near Bus Stand, Pipili, Odisha",
-          services: ["cervical_cancer_screening", "general_healthcare"],
-          phone: "+91-6758-223789",
-          cost: "₹250 for follow-up treatment",
-          distance: "0.8 km"
+        st.session_state.quick_replies = []
+        st.session_state.show_clinic_info = False
+        st.session_state.alternate_location = ""
+        st.rerun()
+
+# Function to update conversation stage and send the next message
+def update_conversation():
+    current_stage = st.session_state.conv_stage
+    
+    # If no name is set, use a default
+    name = st.session_state.user_profile["name"]
+    if not name:
+        name = "there"
+    
+    # Initial greeting
+    if current_stage == "intro":
+        message = f"Hi {name}, this is your health assistant. Sameera, your community health worker, recommended I reach out to you. I want to help you understand the recommended preventative healthcare you should have completed. Are you interested? It does not cost anything and I can help you find the right place and resources."
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "ask_interest"
+        st.session_state.quick_replies = ["Yes", "No"]
+        return
+    
+    # Ask for age after confirming interest
+    elif current_stage == "ask_age":
+        message = "Great, let's start with a few questions. First, how old are you?"
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "waiting_age"
+        st.session_state.quick_replies = ["30", "40", "50", "60+"]
+        return
+    
+    # Ask about annual checkup
+    elif current_stage == "ask_annual_checkup":
+        message = "Ok great. Have you had a doctor or nurse give you an exam in the last year for something unrelated to feeling sick?"
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "waiting_annual_checkup"
+        st.session_state.quick_replies = ["Yes", "No"]
+        return
+    
+    # Ask about cervical cancer screening
+    elif current_stage == "ask_cervical_screening":
+        message = "Have you had a cervical cancer screening test in the past 5 years?"
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "waiting_cervical_screening"
+        st.session_state.quick_replies = ["Yes", "No", "I don't know"]
+        return
+    
+    # Ask about breast cancer screening
+    elif current_stage == "ask_breast_screening":
+        message = "Have you had a breast cancer screening test in the past 5 years?"
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "waiting_breast_screening"
+        st.session_state.quick_replies = ["Yes", "No", "I don't know"]
+        return
+    
+    # Provide recommendation
+    elif current_stage == "provide_recommendation":
+        # Determine recommendations based on responses
+        recommendations = []
+        
+        if st.session_state.user_profile["annual_checkup"] == "No":
+            recommendations.append("an annual wellness exam")
+        
+        if st.session_state.user_profile["cervical_screening"] == "No" and int(st.session_state.user_profile["age"]) >= 30:
+            recommendations.append("an HPV test for cervical cancer screening")
+        
+        if st.session_state.user_profile["breast_screening"] == "No" and int(st.session_state.user_profile["age"]) >= 40:
+            recommendations.append("a breast cancer screening")
+        
+        location = st.session_state.user_profile["current_location"]
+        clinics = st.session_state.clinic_recommendations.get(location, [])
+        clinic = clinics[0] if clinics else None
+        
+        if not recommendations:
+            message = f"{name}, based on your answers, you're up-to-date on your recommended screenings. Great job taking care of your health! Remember to continue your regular check-ups. Is there anything specific about women's health you'd like to know more about?"
+            st.session_state.quick_replies = ["Cervical cancer", "Breast cancer", "General wellness", "No, thanks"]
+        elif clinic:
+            services_needed = ", ".join(recommendations)
+            
+            # Create clinic address with underlined blue text
+            clinic_info = f"<span class='clinic-link'>{clinic['name']}, {clinic['address']}, Phone: {clinic['phone']}</span>"
+            
+            message = f"{name}, based on your answers, I recommend you schedule {services_needed} at the closest clinic, {clinic_info}. "
+            
+            if "annual wellness exam" in services_needed:
+                message += "Making an appointment is easy, call the number and say you want a check-up. "
+            
+            if "HPV test for cervical cancer screening" in services_needed:
+                message += "For the cervical cancer screening, call the number and say you want an HPV test. "
+                if clinic['cost']['cervical_cancer_screening'] == 0:
+                    message += "This screening is available for free. "
+                else:
+                    message += f"This screening costs ₹{clinic['cost']['cervical_cancer_screening']}. "
+            
+            message += "Do you want to learn more about why these screenings are important and what to expect?"
+            
+            st.session_state.quick_replies = ["Yes, tell me more", "No thanks", "I have questions"]
+        else:
+            message = f"{name}, based on your answers, you should schedule {', '.join(recommendations)}. However, I don't have clinic information for your area. Please contact your local community health worker for assistance."
+            st.session_state.quick_replies = ["OK, I will", "I need help finding a clinic"]
+        
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "post_recommendation"
+        st.session_state.show_clinic_info = True
+        return
+    
+    # Follow-up test results demo
+    elif current_stage == "test_results_followup":
+        message = f"{name}, St. Mary's clinic notified me that your cervical cancer results came back and require follow-up, that may include treatment. The doctor requested you come back for another appointment. Do you need help scheduling? What questions do you have?"
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "waiting_results_response"
+        st.session_state.quick_replies = ["I need help scheduling", "What does this mean?", "How much will it cost?"]
+        return
+    
+    # Handle results questions
+    elif current_stage == "answer_results_questions":
+        clinic1 = st.session_state.clinic_recommendations["Pune"][0]
+        clinic2 = st.session_state.clinic_recommendations["Pune"][1]
+        
+        message = f"First, you need to go back to clinic to discuss your results. Your doctor may give you some simple antibiotic pills if it's an infection, or do some more tests or treatment for cervical cancer. You can go to <span class='clinic-link'>{clinic1['name']}</span>, and the price is ₹{clinic1['cost']['treatment']}, or you can go to <span class='clinic-link'>{clinic2['name']}</span>, and the price is ₹{clinic2['cost']['treatment']} if you do need treatment. Do you want to learn more about what to expect from your results meeting and what treatment could mean?"
+        
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "waiting_treatment_questions"
+        st.session_state.quick_replies = ["Yes, tell me more", "I'm not in Pune anymore", "I can't afford this"]
+        return
+    
+    # Handle location change
+    elif current_stage == "handle_location_change":
+        alternate_clinic = st.session_state.clinic_recommendations["Pipili"][0]
+        
+        message = f"Got it. In that case, I suggest you go to <span class='clinic-link'>{alternate_clinic['name']}</span>, their price is ₹{alternate_clinic['cost']['treatment']}. Note there are fewer clinics in this area so it's more expensive, and the time to get an appointment can be longer."
+        
+        st.session_state.messages.append({"role": "assistant", "content": message, "time": datetime.now().strftime("%H:%M")})
+        st.session_state.conv_stage = "post_location_change"
+        st.session_state.quick_replies = ["Thanks, I'll call them", "Can I get financial assistance?", "How urgent is this?"]
+        return
+
+# Process user response
+def process_user_response(response):
+    current_stage = st.session_state.conv_stage
+    
+    # Process interest response
+    if current_stage == "ask_interest":
+        if response.lower() == "yes":
+            st.session_state.conv_stage = "ask_age"
+        else:
+            st.session_state.conv_stage = "end"
+            return "I understand. If you change your mind, your community health worker Sameera can help you reconnect with me. Stay healthy!"
+    
+    # Process age response
+    elif current_stage == "waiting_age":
+        try:
+            age = int(''.join(filter(str.isdigit, response)))
+            st.session_state.user_profile["age"] = age
+            st.session_state.conv_stage = "ask_annual_checkup"
+        except:
+            return "I didn't understand that age. Please enter your age as a number."
+    
+    # Process annual checkup response
+    elif current_stage == "waiting_annual_checkup":
+        if response.lower() in ["yes", "no"]:
+            st.session_state.user_profile["annual_checkup"] = response
+            st.session_state.conv_stage = "ask_cervical_screening"
+        else:
+            return "Please answer with Yes or No. Have you had a doctor or nurse give you an exam in the last year for something unrelated to feeling sick?"
+    
+    # Process cervical screening response
+    elif current_stage == "waiting_cervical_screening":
+        if response.lower() in ["yes", "no", "i don't know"]:
+            st.session_state.user_profile["cervical_screening"] = response
+            st.session_state.conv_stage = "ask_breast_screening"
+        else:
+            return "Please answer with Yes, No, or I don't know. Have you had a cervical cancer screening test in the past 5 years?"
+    
+    # Process breast screening response
+    elif current_stage == "waiting_breast_screening":
+        if response.lower() in ["yes", "no", "i don't know"]:
+            st.session_state.user_profile["breast_screening"] = response
+            st.session_state.conv_stage = "provide_recommendation"
+        else:
+            return "Please answer with Yes, No, or I don't know. Have you had a breast cancer screening test in the past 5 years?"
+    
+    # Process results response
+    elif current_stage == "waiting_results_response":
+        st.session_state.conv_stage = "answer_results_questions"
+    
+    # Process treatment questions
+    elif current_stage == "waiting_treatment_questions":
+        if "not in pune" in response.lower() or "i'm not in pune" in response.lower() or "location" in response.lower():
+            st.session_state.conv_stage = "handle_location_change"
+            st.session_state.user_profile["current_location"] = "Pipili"
+        else:
+            # Generic response for other questions
+            return "I understand your concerns. The most important step is to go back to the clinic to understand your specific situation. The doctor will explain all options and costs based on your results. Would you like me to help schedule an appointment?"
+    
+    # No specific handling needed for other stages
+    return None
+
+# App header
+st.markdown("""
+<div class="header-section">
+    <div class="header-avatar">💜</div>
+    <div>
+        <div class="header-title">Women's Health Navigator</div>
+        <div class="header-subtitle">Your personal health guide</div>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+# Handle demo scenario selection
+demo_scenario = st.session_state.get("demo_scenario", "Basic Screening Recommendation")
+if len(st.session_state.messages) == 0:
+    if demo_scenario == "Test Results Follow-up":
+        # Set up profile for test results scenario
+        st.session_state.user_profile = {
+            "name": st.session_state.user_profile["name"] or "Priya",
+            "age": 45,
+            "location": "Pune",
+            "annual_checkup": "Yes",
+            "cervical_screening": "Yes",
+            "breast_screening": "Yes",
+            "current_location": "Pune"
         }
-      ]
-    };
+        st.session_state.conv_stage = "test_results_followup"
+    elif demo_scenario == "Location Change":
+        # Set up profile for location change scenario
+        st.session_state.user_profile = {
+            "name": st.session_state.user_profile["name"] or "Priya",
+            "age": 45,
+            "location": "Pune",
+            "annual_checkup": "Yes",
+            "cervical_screening": "Yes",
+            "breast_screening": "Yes",
+            "current_location": "Pune"
+        }
+        st.session_state.conv_stage = "test_results_followup"
+
+# Start or continue conversation
+if len(st.session_state.messages) == 0:
+    update_conversation()
+
+# Display chat history
+for i, message in enumerate(st.session_state.messages):
+    with st.container():
+        st.markdown(f"""
+        <div class="chat-message {message['role']}">
+            {message['content']}
+            <div class="chat-timestamp">{message.get('time', '12:00')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Display quick replies if available
+if st.session_state.quick_replies and len(st.session_state.quick_replies) > 0:
+    st.markdown('<div class="quick-replies">', unsafe_allow_html=True)
+    cols = st.columns(min(len(st.session_state.quick_replies), 3))
+    for i, reply in enumerate(st.session_state.quick_replies):
+        col_idx = i % len(cols)
+        if cols[col_idx].button(reply, key=f"qr_{i}"):
+            # Add user message
+            st.session_state.messages.append({"role": "user", "content": reply, "time": datetime.now().strftime("%H:%M")})
+            
+            # Process response
+            response_message = process_user_response(reply)
+            if response_message:
+                st.session_state.messages.append({"role": "assistant", "content": response_message, "time": datetime.now().strftime("%H:%M")})
+            else:
+                update_conversation()
+            
+            # Clear quick replies
+            st.session_state.quick_replies = []
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# User input area
+with st.container():
+    st.markdown('<div class="footer-input">', unsafe_allow_html=True)
+    user_input = st.text_input("Type a message...", key="user_input")
     
-    this.screeningInfo = {
-      via: {
-        name: "VIA Test",
-        description: "Visual Inspection with Acetic Acid - a simple test where the doctor applies vinegar solution to the cervix and observes any changes that might indicate cancer or pre-cancer.",
-        frequency: "Every 1 year",
-        cost: "Usually free at primary health centers",
-        preparation: "No special preparation needed"
-      },
-      pap: {
-        name: "Pap Smear Test",
-        description: "A procedure that collects cells from the cervix to check for abnormalities that may indicate cancer or pre-cancer.",
-        frequency: "Every 3 years",
-        cost: "Moderately priced, available at district hospitals",
-        preparation: "Avoid sexual intercourse, douching, or using vaginal medications for 2 days before the test"
-      },
-      hpv: {
-        name: "HPV Test",
-        description: "Tests specifically for high-risk HPV infections that can lead to cervical cancer.",
-        frequency: "Every 5 years",
-        cost: "More expensive, available at private hospitals and medical colleges",
-        preparation: "Similar to Pap test preparation"
-      }
-    };
-    
-    this.recommendationByAge = {
-      "9-14": {
-        hpvVaccine: "Recommended (2 doses)",
-        screening: "Not yet required"
-      },
-      "15-29": {
-        hpvVaccine: "Recommended (3 doses)",
-        screening: "Start screening at 25 with Pap smear or VIA test"
-      },
-      "30-45": {
-        hpvVaccine: "Consult doctor about vaccination benefits",
-        screening: "HPV test or VIA test every 5 years"
-      },
-      "45-65": {
-        hpvVaccine: "Not typically recommended",
-        screening: "Continue screening until age 65"
-      },
-      "65+": {
-        hpvVaccine: "Not recommended",
-        screening: "Can discontinue after consistent negative results in the past 15 years"
-      }
-    };
-  }
+    if user_input:
+        # Add user message
+        st.session_state.messages.append({"role": "user", "content": user_input, "time": datetime.now().strftime("%H:%M")})
+        
+        # Process response
+        response_message = process_user_response(user_input)
+        if response_message:
+            st.session_state.messages.append({"role": "assistant", "content": response_message, "time": datetime.now().strftime("%H:%M")})
+        else:
+            update_conversation()
+        
+        # Clear quick replies
+        st.session_state.quick_replies = []
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
-  // Start the conversation
-  startConversation(userName, chw) {
-    this.userData.name = userName;
-    return `Hi ${userName}, this is your health assistant. ${chw || "Your community health worker"} recommended I reach out to you. I want to help you understand the recommended preventative healthcare you should have completed. Are you interested? It does not cost anything and I can help you find the right place and resources.`;
-  }
+# Display disclaimer
+st.markdown("""
+<div class="disclaimer">
+    This Women's Health Navigator chatbot is a prototype demonstration developed by the consortium of FOGSI, JHPIEGO, and DL Analytics, LLC.
+    It is for informational purposes only and does not provide medical advice.
+</div>
+""", unsafe_allow_html=True)
 
-  // Process user response to initial greeting
-  processInitialResponse(response) {
-    if (this.isPositiveResponse(response)) {
-      return "Great, let's start with a few quick free questions. First, how old are you?";
-    } else {
-      return "I understand. If you change your mind, I'm here to help. Is there anything specific about women's health you're curious about?";
-    }
-  }
-
-  // Process age response and determine next question
-  processAgeResponse(age) {
-    this.userData.age = parseInt(age);
-    
-    if (isNaN(this.userData.age)) {
-      return "I didn't catch that. Please share your age as a number.";
-    }
-    
-    return "Ok great. Have you had a doctor or nurse give you an exam in the last year for something unrelated to feeling sick?";
-  }
-
-  // Process checkup response
-  processCheckupResponse(response) {
-    this.userData.lastCheckup = this.isPositiveResponse(response);
-    
-    if (this.userData.age >= 30) {
-      return "Have you had a cervical cancer screening test in the past 5 years?";
-    } else if (this.userData.age >= 9 && this.userData.age <= 14) {
-      return "Has your daughter received the HPV vaccine? This is recommended for girls aged 9-14 years to prevent cervical cancer in the future.";
-    } else {
-      return "Where are you currently located? This will help me recommend the nearest healthcare facilities.";
-    }
-  }
-
-  // Process cervical screening response
-  processCervicalScreeningResponse(response) {
-    this.userData.screeningHistory.cervical = this.isPositiveResponse(response);
-    
-    if (this.userData.age >= 40) {
-      return "Have you had a breast cancer screening test in the past 2 years?";
-    } else {
-      return "Where are you currently located? This will help me recommend the nearest healthcare facilities.";
-    }
-  }
-
-  // Process breast screening response
-  processBreastScreeningResponse(response) {
-    this.userData.screeningHistory.breast = this.isPositiveResponse(response);
-    return "Where are you currently located? This will help me recommend the nearest healthcare facilities.";
-  }
-
-  // Process location response
-  processLocationResponse(location) {
-    this.userData.location = location;
-    return this.generateRecommendation();
-  }
-
-  // Generate recommendation based on user data
-  generateRecommendation() {
-    const ageGroup = this.getAgeGroup();
-    const recommendation = this.recommendationByAge[ageGroup];
-    const nearestClinic = this.findNearestClinic();
-    
-    let message = `${this.userData.name}, based on your answers, `;
-    
-    if (this.userData.age >= 30 && !this.userData.screeningHistory.cervical) {
-      message += `I recommend you schedule a time for a cervical cancer screening test at the closest clinic, ${nearestClinic.name}, ${nearestClinic.address}, Phone: ${nearestClinic.phone}. `;
-      
-      if (this.userData.age >= 30 && this.userData.age <= 45) {
-        message += `For your age group (${this.userData.age}), an HPV test is the best option, which should be done every 5 years. `;
-      } else {
-        message += `For your age group (${this.userData.age}), a VIA test is a good option, which is free and quick. `;
-      }
-      
-      message += `Making an appointment is easy, call the number and say you want a cervical cancer screening. `;
-    } else if (this.userData.age >= 9 && this.userData.age <= 14 && !this.userData.hpvVaccinated) {
-      message += `I recommend HPV vaccination, which is best given at your age (9-14 years). The vaccination requires 2 doses, given 6 months apart. You can get this at ${nearestClinic.name}, ${nearestClinic.address}, Phone: ${nearestClinic.phone}. `;
-      message += `This vaccination helps prevent cervical cancer later in life. `;
-    } else if (this.userData.age >= 40 && !this.userData.screeningHistory.breast) {
-      message += `I recommend you schedule a breast cancer screening. You can get this at ${nearestClinic.name}, ${nearestClinic.address}, Phone: ${nearestClinic.phone}. `;
-    } else {
-      message += `based on your age (${this.userData.age}) and screening history, you appear to be up-to-date with recommended preventive care. It's important to continue regular screenings. `;
-      message += `Your nearest women's health center is ${nearestClinic.name}, ${nearestClinic.address}, Phone: ${nearestClinic.phone} if you need any services in the future. `;
-    }
-    
-    message += "Do you want to learn more about why these screenings are important and what to expect?";
-    
-    return message;
-  }
-
-  // Process user's interest in learning more
-  processLearnMoreResponse(response) {
-    if (this.isPositiveResponse(response)) {
-      if (this.userData.age >= 30 && !this.userData.screeningHistory.cervical) {
-        return this.getCervicalCancerInfo();
-      } else if (this.userData.age >= 9 && this.userData.age <= 14) {
-        return this.getHPVVaccineInfo();
-      } else if (this.userData.age >= 40 && !this.userData.screeningHistory.breast) {
-        return this.getBreastCancerInfo();
-      } else {
-        return this.getGeneralPreventionInfo();
-      }
-    } else {
-      return "No problem. If you have any questions in the future, feel free to ask. Would you like me to remind you when it's time for your next screening?";
-    }
-  }
-
-  // Follow-up after test results
-  followUpAfterResults(testType, result) {
-    if (testType === "cervical" && result === "abnormal") {
-      return `${this.userData.name}, the clinic notified me that your cervical cancer screening results came back and require follow-up, that may include treatment. The doctor requested you come back for another appointment. Do you need help scheduling? What questions do you have?`;
-    } else if (testType === "cervical" && result === "normal") {
-      return `${this.userData.name}, good news! Your cervical cancer screening results came back normal. You should have your next screening in ${this.userData.age >= 30 && this.userData.age <= 45 ? "5 years" : "1 year"}. I'll remind you when it's time. Do you have any questions?`;
-    }
-    
-    return `${this.userData.name}, the clinic contacted me about your recent test results. They've asked for you to follow up. Can I help you schedule an appointment?`;
-  }
-
-  // Process follow-up response
-  processFollowUpResponse(response, location) {
-    if (location && location !== this.userData.location) {
-      const clinics = this.clinics[location] || [];
-      
-      if (clinics.length > 0) {
-        const clinic = clinics[0];
-        return `Got it. In ${location}, I suggest you go to ${clinic.name}, ${clinic.address}, phone: ${clinic.phone}. Their price is ${clinic.cost}. Note there might be fewer clinics in this area, so appointments might take longer to get. Would you like me to help you schedule an appointment?`;
-      } else {
-        return `I don't have information about clinics in ${location} yet. Can you tell me which town or city you're nearest to, and I'll try to find resources for you?`;
-      }
-    }
-    
-    if (this.isPositiveResponse(response)) {
-      return `I'll help you schedule. The doctor will likely discuss your results and possible next steps. This might include simple medication if it's an infection, or further testing or treatment if there are abnormal cells. Treatment is usually quick and effective, especially when caught early. Would you prefer a morning or afternoon appointment?`;
-    } else {
-      return `I understand. When you're ready to schedule, I'm here to help. Remember that follow-up is important, as early treatment is very effective. Is there anything else I can help with?`;
-    }
-  }
-
-  // Helper methods
-  isPositiveResponse(response) {
-    response = response.toLowerCase();
-    return response.includes('yes') || response.includes('yeah') || response.includes('sure') || response.includes('ok') || response.includes('okay');
-  }
-
-  getAgeGroup() {
-    const age = this.userData.age;
-    
-    if (age >= 9 && age <= 14) return "9-14";
-    if (age >= 15 && age <= 29) return "15-29";
-    if (age >= 30 && age <= 45) return "30-45";
-    if (age >= 46 && age <= 65) return "45-65";
-    return "65+";
-  }
-
-  findNearestClinic() {
-    const clinicsInLocation = this.clinics[this.userData.location] || this.clinics["Pune"];
-    return clinicsInLocation[0]; // For simplicity, return the first clinic
-  }
-
-  // Information methods
-  getCervicalCancerInfo() {
-    return `
-About Cervical Cancer:
-• Cervical cancer is a type of cancer that occurs in the cells of the cervix - the lower part of the uterus.
-• Almost all cervical cancers are caused by Human Papillomavirus (HPV), a common infection transmitted through intimate contact.
-• Cervical cancer takes years to develop, often decades, and most women don't show any symptoms until the cancer is advanced.
-• This is why regular screening is so important - it can detect changes before they become cancer.
-
-About the screening:
-• The screening is quick (5-10 minutes) and done by a female health worker or doctor.
-• You'll lie on an exam table, and the provider will gently insert a device called a speculum to see your cervix.
-• Depending on the test type, they'll either apply a vinegar solution (VIA test) or take a small sample of cells (Pap or HPV test).
-• The test isn't painful but might be slightly uncomfortable.
-
-Would you like me to help you schedule an appointment?`;
-  }
-
-  getHPVVaccineInfo() {
-    return `
-About HPV Vaccination:
-• The HPV vaccine protects against the types of HPV that most commonly cause cervical cancer.
-• It works best when given before any exposure to HPV, which is why it's recommended for girls aged 9-14 years.
-• At this age, only 2 doses are needed (compared to 3 doses for older ages).
-• The vaccine is safe and effective, with minimal side effects (usually just soreness at the injection site).
-• Getting vaccinated now provides long-term protection against cervical cancer in the future.
-• Even with vaccination, regular screening is still recommended after age 30.
-
-Would you like me to help you schedule a vaccination appointment?`;
-  }
-
-  getBreastCancerInfo() {
-    return `
-About Breast Cancer Screening:
-• Breast cancer screening can help find breast cancer early, when it's easier to treat.
-• The main screening test is a mammogram, which is an X-ray of the breast.
-• It's recommended every 2 years for women age 40 and older.
-• The test takes about 20 minutes and involves compressing each breast between two plates for a few seconds.
-• It might be uncomfortable but shouldn't be painful.
-• Regular screenings, along with breast self-awareness, are the best ways to detect breast cancer early.
-
-Would you like me to help you schedule a mammogram?`;
-  }
-
-  getGeneralPreventionInfo() {
-    return `
-General Health Tips for Women:
-• Maintain a healthy diet rich in fruits and vegetables
-• Exercise regularly
-• Avoid or limit alcohol consumption
-• Maintain a healthy weight
-• Avoid all forms of tobacco
-• For cervical cancer prevention, vaccination of girls aged 9-14 and regular screening for women aged 30-65 are the most effective strategies.
-• Remember that most cervical cancers can be prevented through vaccination and screening.
-
-Is there anything specific you'd like more information about?`;
-  }
-}
-
-// Usage example:
-/*
-const bot = new HealthNavigatorBot();
-let response = bot.startConversation("Meera", "Sameera");
-console.log(response);
-
-// Simulate user responses
-response = bot.processInitialResponse("Yes");
-console.log(response);
-
-response = bot.processAgeResponse("45");
-console.log(response);
-
-response = bot.processCheckupResponse("No");
-console.log(response);
-
-response = bot.processCervicalScreeningResponse("No");
-console.log(response);
-
-response = bot.processBreastScreeningResponse("Yes");
-console.log(response);
-
-response = bot.processLocationResponse("Pune");
-console.log(response);
-
-response = bot.processLearnMoreResponse("Yes");
-console.log(response);
-
-// Later follow-up
-response = bot.followUpAfterResults("cervical", "abnormal");
-console.log(response);
-
-response = bot.processFollowUpResponse("I'm actually not in this area now, I went to Pipili to take care of my ailing mother. I'm going to be here for the next couple of months.", "Pipili");
-console.log(response);
-*/
-
-module.exports = HealthNavigatorBot;
+# Check if OpenAI API key is missing
+if not st.session_state.openai_api_key:
+    # Only show a minimal warning in the sidebar to not disrupt the demo flow
+    st.sidebar.warning("⚠️ OpenAI API key not set (needed for advanced features)")
