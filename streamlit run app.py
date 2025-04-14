@@ -135,37 +135,6 @@ if 'follow_up_scheduled' not in st.session_state:
     st.session_state.follow_up_scheduled = False
 if 'next_appointment_date' not in st.session_state:
     st.session_state.next_appointment_date = None
-if 'clinic_recommendations' not in st.session_state:
-    st.session_state.clinic_recommendations = {
-        "Pune": [
-            {
-                "name": "St. Mary's Health Center",
-                "address": "200 Example Road, Pune",
-                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
-                "phone": "123-456-7880",
-                "cost": {"cervical_cancer_screening": 0, "breast_cancer_screening": 0, "annual_checkup": 0, "treatment": 15},
-                "notes": "Free screenings available. Open Saturdays for working women."
-            },
-            {
-                "name": "Women's Wellness Clinic",
-                "address": "45 Health Avenue, Pune",
-                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
-                "phone": "123-555-9090",
-                "cost": {"cervical_cancer_screening": 0, "breast_cancer_screening": 0, "annual_checkup": 0, "treatment": 18},
-                "notes": "Specializes in women's health. Female doctors available."
-            }
-        ],
-        "Pipili": [
-            {
-                "name": "Pipili Community Hospital",
-                "address": "78 Main Street, Pipili",
-                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
-                "phone": "987-654-3210",
-                "cost": {"cervical_cancer_screening": 5, "breast_cancer_screening": 5, "annual_checkup": 10, "treatment": 20},
-                "notes": "Limited appointment availability. Call ahead."
-            }
-        ]
-    }
 
 # Configure API key from secrets or environment
 try:
@@ -276,171 +245,6 @@ with st.sidebar:
         st.session_state.recommendations = []
         st.rerun()
 
-# Assessment flow configuration
-ASSESSMENT_FLOW = {
-    "intro": {
-        "message": lambda name: f"Hi {name}, this is your health assistant. Sameera, your community health worker, recommended I reach out to you. I want to help you understand the recommended preventative healthcare you should have completed. Are you interested? It does not cost anything and I can help you find the right place and resources.",
-        "next_stage": "ask_interest",
-        "quick_replies": ["Yes", "No"]
-    },
-    
-    # Post-visit flows for different screening scenarios
-    "post_visit_annual": {
-        "message": lambda name: f"Hello {name}, I wanted to check in with you after your annual wellness visit at the clinic yesterday. How are you feeling? Is there anything from your visit that you have questions about?",
-        "next_stage": "waiting_annual_feedback",
-        "quick_replies": ["I have a question", "Everything is clear", "When should I come back?"]
-    },
-    "post_visit_cervical": {
-        "message": lambda name: f"Hello {name}, I wanted to check in with you after your cervical cancer screening yesterday. Your results will be ready in about 3-4 weeks. Do you have any questions about the procedure or what happens next?",
-        "next_stage": "waiting_cervical_feedback",
-        "quick_replies": ["How will I get results?", "What could the results show?", "Everything is clear"]
-    },
-    "post_visit_comprehensive": {
-        "message": lambda name: f"Hello {name}, I wanted to check in with you after your comprehensive screening yesterday that included both cervical and breast cancer screening. Your results will be ready in about 3-4 weeks. How are you feeling, and do you have any questions?",
-        "next_stage": "waiting_comprehensive_feedback",
-        "quick_replies": ["How will I get results?", "What could the results show?", "Everything is clear"]
-    },
-    
-    # Result notification stages for cervical screening
-    "cervical_results_notification": {
-        "message": lambda name, result: get_cervical_result_message(name, result),
-        "next_stage": "waiting_cervical_results_response",
-        "quick_replies": lambda result: get_cervical_result_replies(result)
-    },
-    
-    # Result notification stages for breast screening
-    "breast_results_notification": {
-        "message": lambda name, result: get_breast_result_message(name, result),
-        "next_stage": "waiting_breast_results_response",
-        "quick_replies": lambda result: get_breast_result_replies(result)
-    },
-    
-    # Comprehensive results (both cervical and breast)
-    "comprehensive_results_notification": {
-        "message": lambda name, cervical_result, breast_result: f"Hello {name}, I'm reaching out regarding your recent screening results.\n\n{get_cervical_result_message(name, cervical_result, include_greeting=False)}\n\n{get_breast_result_message(name, breast_result, include_greeting=False)}",
-        "next_stage": "waiting_comprehensive_results_response",
-        "quick_replies": lambda cervical_result, breast_result: get_comprehensive_result_replies(cervical_result, breast_result)
-    },
-    "ask_interest": {
-        "yes": "ask_age",
-        "no": "end",
-        "no_message": "I understand. If you change your mind, your community health worker Sameera can help you reconnect with me. Stay healthy!"
-    },
-    "ask_age": {
-        "message": "Great, let's start with a few questions to understand your health needs better. First, how old are you?",
-        "next_stage": "waiting_age",
-        "quick_replies": ["25-30", "31-40", "41-50", "51+"]
-    },
-    "ask_marital_status": {
-        "message": "Thank you. What is your marital status?",
-        "next_stage": "waiting_marital_status",
-        "quick_replies": ["Single", "Married", "Widowed", "Divorced"]
-    },
-    "ask_education": {
-        "message": "What is your highest level of education?",
-        "next_stage": "waiting_education",
-        "quick_replies": ["No formal education", "Primary", "Secondary", "Higher"]
-    },
-    "ask_menstrual_regularity": {
-        "message": "Now let's talk about your health. Is your menstrual cycle regular?",
-        "next_stage": "waiting_menstrual_regularity",
-        "quick_replies": ["Regular", "Irregular", "Menopause", "Not applicable"]
-    },
-    "ask_pregnancies": {
-        "message": "How many pregnancies have you had?",
-        "next_stage": "waiting_pregnancies",
-        "quick_replies": ["0", "1", "2", "3+"]
-    },
-    "ask_contraceptive": {
-        "message": "Are you currently using any contraceptive method?",
-        "next_stage": "waiting_contraceptive",
-        "quick_replies": ["None", "Oral Pills", "IUD", "Condoms", "Sterilization", "Other"]
-    },
-    "ask_complaints": {
-        "message": "Do you currently have any of these health concerns? (You can select multiple)",
-        "next_stage": "waiting_complaints",
-        "quick_replies": ["None", "Pelvic pain", "Vaginal discharge", "Irregular bleeding", "Pain during intercourse", "Urinary issues", "Other"]
-    },
-    "ask_annual_checkup": {
-        "message": "Have you had a doctor or nurse give you an exam in the last year for something unrelated to feeling sick?",
-        "next_stage": "waiting_annual_checkup",
-        "quick_replies": ["Yes", "No", "Not sure"]
-    },
-    "ask_cervical_screening": {
-        "message": "Have you had a cervical cancer screening test (like a Pap smear or HPV test) in the past 5 years?",
-        "next_stage": "waiting_cervical_screening",
-        "quick_replies": ["Yes", "No", "I don't know"]
-    },
-    "ask_breast_screening": {
-        "message": "Have you had a breast cancer screening test in the past 5 years?",
-        "next_stage": "waiting_breast_screening",
-        "quick_replies": ["Yes", "No", "I don't know"]
-    },
-    "ask_family_history": {
-        "message": "Is there any history of reproductive cancers in your family, such as breast cancer, cervical cancer, or ovarian cancer?",
-        "next_stage": "waiting_family_history",
-        "quick_replies": ["Yes", "No", "I don't know"]
-    },
-    "ask_chronic_conditions": {
-        "message": "Have you been diagnosed with any of these conditions? (You can select multiple)",
-        "next_stage": "waiting_chronic_conditions",
-        "quick_replies": ["None", "Hypertension", "Diabetes", "Anemia", "Thyroid disorder", "STI/RTI", "Other"]
-    },
-    "ask_lifestyle": {
-        "message": "Let's talk about lifestyle. Do you use tobacco products?",
-        "next_stage": "waiting_tobacco",
-        "quick_replies": ["Yes", "No"]
-    },
-    "ask_alcohol": {
-        "message": "Do you consume alcohol?",
-        "next_stage": "waiting_alcohol",
-        "quick_replies": ["Yes", "No"]
-    },
-    "ask_physical_activity": {
-        "message": "How would you describe your level of physical activity?",
-        "next_stage": "waiting_physical_activity",
-        "quick_replies": ["Very active", "Moderately active", "Lightly active", "Sedentary"]
-    },
-    "provide_recommendation": {
-        "message": lambda name, recommendations: f"{name}, based on your answers, I recommend you schedule {recommendations}. Would you like information on clinics near you?",
-        "next_stage": "waiting_clinic_info",
-        "quick_replies": ["Yes, show me clinics", "Not now"]
-    }
-}
-
-# Function to determine the assessment path based on age and risk factors
-def determine_assessment_path(age, initial_response=None):
-    """
-    Determines which questions to ask based on age and initial responses
-    """
-    # Basic path for all women
-    basic_path = ["ask_age", "ask_marital_status", "ask_education", "ask_annual_checkup"]
-    
-    # Add reproductive health questions for women of reproductive age (under 50)
-    if age < 50:
-        basic_path.extend(["ask_menstrual_regularity", "ask_pregnancies", "ask_contraceptive"])
-    
-    # Always ask about complaints
-    basic_path.append("ask_complaints")
-    
-    # Add screening questions based on age
-    if age >= 30:
-        basic_path.append("ask_cervical_screening")
-    
-    if age >= 40:
-        basic_path.append("ask_breast_screening")
-    
-    # Add family history and risk factors for all
-    basic_path.extend(["ask_family_history", "ask_chronic_conditions"])
-    
-    # Add lifestyle questions
-    basic_path.extend(["ask_lifestyle", "ask_alcohol", "ask_physical_activity"])
-    
-    # End with recommendation
-    basic_path.append("provide_recommendation")
-    
-    return basic_path
-
 # Helper functions for result messages
 def get_cervical_result_message(name, result, include_greeting=True):
     """Generate message for cervical screening results"""
@@ -506,6 +310,171 @@ def get_comprehensive_result_replies(cervical_result, breast_result):
     replies.append("I understand, thank you")
     
     return replies
+
+# Assessment flow configuration
+ASSESSMENT_FLOW = {
+    "intro": {
+        "message": lambda name: f"Hi {name}, this is your health assistant. Sameera, your community health worker, recommended I reach out to you. I want to help you understand the recommended preventative healthcare you should have completed. Are you interested? It does not cost anything and I can help you find the right place and resources.",
+        "next_stage": "ask_interest",
+        "quick_replies": ["Yes", "No"]
+    },
+    "ask_interest": {
+        "yes": "ask_age",
+        "no": "end",
+        "no_message": "I understand. If you change your mind, your community health worker Sameera can help you reconnect with me. Stay healthy!"
+    },
+    "ask_age": {
+        "message": "Great, let's start with a few questions to understand your health needs better. First, how old are you?",
+        "next_stage": "waiting_age",
+        "quick_replies": ["25-30", "31-40", "41-50", "51+"]
+    },
+    "ask_marital_status": {
+        "message": "Thank you. What is your marital status? You can also type 'Skip' if you prefer not to answer.",
+        "next_stage": "waiting_marital_status",
+        "quick_replies": ["Single", "Married", "Widowed", "Divorced", "Skip"]
+    },
+    "ask_education": {
+        "message": "What is your highest level of education? You can also type 'Skip' if you prefer not to answer.",
+        "next_stage": "waiting_education",
+        "quick_replies": ["No formal education", "Primary", "Secondary", "Higher", "Skip"]
+    },
+    "ask_menstrual_regularity": {
+        "message": "Now let's talk about your health. Is your menstrual cycle regular? Feel free to tell me in your own words.",
+        "next_stage": "waiting_menstrual_regularity",
+        "quick_replies": ["Regular", "Irregular", "Menopause", "Not applicable", "Skip"]
+    },
+    "ask_pregnancies": {
+        "message": "How many pregnancies have you had? Just type the number or select from the options.",
+        "next_stage": "waiting_pregnancies",
+        "quick_replies": ["0", "1", "2", "3+", "Skip"]
+    },
+    "ask_contraceptive": {
+        "message": "Are you currently using any contraceptive method? You can tell me in your own words.",
+        "next_stage": "waiting_contraceptive",
+        "quick_replies": ["None", "Oral Pills", "IUD", "Condoms", "Sterilization", "Other", "Skip"]
+    },
+    "ask_complaints": {
+        "message": "Do you currently have any health concerns? Feel free to describe them in your own words, or select from common issues below.",
+        "next_stage": "waiting_complaints",
+        "quick_replies": ["None", "Pelvic pain", "Vaginal discharge", "Irregular bleeding", "Pain during intercourse", "Urinary issues", "Other"]
+    },
+    "ask_annual_checkup": {
+        "message": "Have you had a doctor or nurse give you an exam in the last year for something unrelated to feeling sick?",
+        "next_stage": "waiting_annual_checkup",
+        "quick_replies": ["Yes", "No", "Not sure"]
+    },
+    "ask_cervical_screening": {
+        "message": "Have you had a cervical cancer screening test (like a Pap smear or HPV test) in the past 5 years?",
+        "next_stage": "waiting_cervical_screening",
+        "quick_replies": ["Yes", "No", "I don't know"]
+    },
+    "ask_breast_screening": {
+        "message": "Have you had a breast cancer screening test in the past 5 years?",
+        "next_stage": "waiting_breast_screening",
+        "quick_replies": ["Yes", "No", "I don't know"]
+    },
+    "ask_family_history": {
+        "message": "Is there any history of reproductive cancers in your family, such as breast cancer, cervical cancer, or ovarian cancer?",
+        "next_stage": "waiting_family_history",
+        "quick_replies": ["Yes", "No", "I don't know", "Skip"]
+    },
+    "ask_chronic_conditions": {
+        "message": "Do you have any ongoing health conditions? Feel free to mention them in your own words, or select from common ones below.",
+        "next_stage": "waiting_chronic_conditions",
+        "quick_replies": ["None", "Hypertension", "Diabetes", "Anemia", "Thyroid disorder", "STI/RTI", "Other"]
+    },
+    "ask_lifestyle": {
+        "message": "Let's talk about lifestyle. Do you use tobacco products?",
+        "next_stage": "waiting_tobacco",
+        "quick_replies": ["Yes", "No", "Skip"]
+    },
+    "ask_alcohol": {
+        "message": "Do you consume alcohol?",
+        "next_stage": "waiting_alcohol",
+        "quick_replies": ["Yes", "No", "Skip"]
+    },
+    "ask_physical_activity": {
+        "message": "How would you describe your level of physical activity? You can tell me in your own words.",
+        "next_stage": "waiting_physical_activity",
+        "quick_replies": ["Very active", "Moderately active", "Lightly active", "Sedentary", "Skip"]
+    },
+    "provide_recommendation": {
+        "message": lambda name, recommendations: f"{name}, based on your answers, I recommend you schedule {recommendations}. Would you like information on clinics near you?",
+        "next_stage": "waiting_clinic_info",
+        "quick_replies": ["Yes, show me clinics", "Not now"]
+    },
+    
+    # Post-visit flows for different screening scenarios
+    "post_visit_annual": {
+        "message": lambda name: f"Hello {name}, I wanted to check in with you after your annual wellness visit at the clinic yesterday. How are you feeling? Is there anything from your visit that you have questions about?",
+        "next_stage": "waiting_annual_feedback",
+        "quick_replies": ["I have a question", "Everything is clear", "When should I come back?"]
+    },
+    "post_visit_cervical": {
+        "message": lambda name: f"Hello {name}, I wanted to check in with you after your cervical cancer screening yesterday. Your results will be ready in about 3-4 weeks. Do you have any questions about the procedure or what happens next?",
+        "next_stage": "waiting_cervical_feedback",
+        "quick_replies": ["How will I get results?", "What could the results show?", "Everything is clear"]
+    },
+    "post_visit_comprehensive": {
+        "message": lambda name: f"Hello {name}, I wanted to check in with you after your comprehensive screening yesterday that included both cervical and breast cancer screening. Your results will be ready in about 3-4 weeks. How are you feeling, and do you have any questions?",
+        "next_stage": "waiting_comprehensive_feedback",
+        "quick_replies": ["How will I get results?", "What could the results show?", "Everything is clear"]
+    },
+    
+    # Result notification stages for cervical screening
+    "cervical_results_notification": {
+        "message": lambda name, result: get_cervical_result_message(name, result),
+        "next_stage": "waiting_cervical_results_response",
+        "quick_replies": lambda result: get_cervical_result_replies(result)
+    },
+    
+    # Result notification stages for breast screening
+    "breast_results_notification": {
+        "message": lambda name, result: get_breast_result_message(name, result),
+        "next_stage": "waiting_breast_results_response",
+        "quick_replies": lambda result: get_breast_result_replies(result)
+    },
+    
+    # Comprehensive results (both cervical and breast)
+    "comprehensive_results_notification": {
+        "message": lambda name, cervical_result, breast_result: f"Hello {name}, I'm reaching out regarding your recent screening results.\n\n{get_cervical_result_message(name, cervical_result, include_greeting=False)}\n\n{get_breast_result_message(name, breast_result, include_greeting=False)}",
+        "next_stage": "waiting_comprehensive_results_response",
+        "quick_replies": lambda cervical_result, breast_result: get_comprehensive_result_replies(cervical_result, breast_result)
+    },
+}
+
+# Function to determine the assessment path based on age and risk factors
+def determine_assessment_path(age, initial_response=None):
+    """
+    Determines which questions to ask based on age and initial responses
+    """
+    # Basic path for all women
+    basic_path = ["ask_age", "ask_marital_status", "ask_education", "ask_annual_checkup"]
+    
+    # Add reproductive health questions for women of reproductive age (under 50)
+    if age < 50:
+        basic_path.extend(["ask_menstrual_regularity", "ask_pregnancies", "ask_contraceptive"])
+    
+    # Always ask about complaints
+    basic_path.append("ask_complaints")
+    
+    # Add screening questions based on age
+    if age >= 30:
+        basic_path.append("ask_cervical_screening")
+    
+    if age >= 40:
+        basic_path.append("ask_breast_screening")
+    
+    # Add family history and risk factors for all
+    basic_path.extend(["ask_family_history", "ask_chronic_conditions"])
+    
+    # Add lifestyle questions
+    basic_path.extend(["ask_lifestyle", "ask_alcohol", "ask_physical_activity"])
+    
+    # End with recommendation
+    basic_path.append("provide_recommendation")
+    
+    return basic_path
 
 # Function to determine health recommendations based on user profile
 def determine_recommendations(user_profile):
@@ -751,7 +720,644 @@ def process_user_response(response):
         else:
             st.session_state.conv_stage = "end"
             return "I understand. If you change your mind, your community health worker Sameera can help you reconnect with me. Stay healthy!"
+    
+    # Process age response
+    elif current_stage == "waiting_age":
+        try:
+            # First check if it's one of our quick reply options
+            if response in ["25-30", "31-40", "41-50", "51+"]:
+                # Parse age range and use the lower bound
+                age = int(response.split("-")[0])
+                st.session_state.user_profile["age"] = age
+                # Determine assessment path based on age
+                st.session_state.assessment_path = determine_assessment_path(age)
+                st.session_state.conv_stage = "ask_marital_status"
+                return None
             
+            # Otherwise try to extract numbers from the response
+            digits = ''.join(filter(str.isdigit, response))
+            if digits:
+                age = int(digits)
+                if 18 <= age <= 120:  # Reasonable age range
+                    st.session_state.user_profile["age"] = age
+                    # Determine assessment path based on age
+                    st.session_state.assessment_path = determine_assessment_path(age)
+                    st.session_state.conv_stage = "ask_marital_status"
+                    return None
+            
+            # If we got here, we couldn't parse the age but will still move on
+            st.session_state.user_profile["age"] = 35  # Default to middle age
+            st.session_state.assessment_path = determine_assessment_path(35)
+            st.session_state.conv_stage = "ask_marital_status"
+            return "I'm not sure I got your age correctly, but let's continue. I'll use an estimate for now. What is your marital status?"
+        except Exception as e:
+            st.sidebar.error(f"Error processing age: {str(e)}")
+            st.session_state.user_profile["age"] = 35  # Default to middle age
+            st.session_state.assessment_path = determine_assessment_path(35)
+            st.session_state.conv_stage = "ask_marital_status"
+            return "Let's move on to the next question. What is your marital status?"
+    
+    # Process marital status
+    elif current_stage == "waiting_marital_status":
+        # Direct matches for button clicks
+        if response in ["Single", "Married", "Widowed", "Divorced", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["marital_status"] = "Not specified"
+            else:
+                st.session_state.user_profile["marital_status"] = response
+            st.session_state.conv_stage = "ask_education"
+            return None
+            
+        # Allow for flexible matching of marital status
+        status_mapping = {
+            "single": "Single",
+            "never married": "Single",
+            "unmarried": "Single",
+            "married": "Married",
+            "widow": "Widowed", 
+            "widowed": "Widowed",
+            "divorce": "Divorced",
+            "divorced": "Divorced",
+            "separated": "Divorced"
+        }
+        
+        # Try to match their response to a known status
+        matched = False
+        for key, value in status_mapping.items():
+            if key in response.lower():
+                st.session_state.user_profile["marital_status"] = value
+                matched = True
+                break
+        
+        # If we couldn't match, or they want to skip, still move forward
+        if not matched:
+            if "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+                st.session_state.user_profile["marital_status"] = "Not specified"
+            else:
+                # Just use their response directly
+                st.session_state.user_profile["marital_status"] = response
+        
+        # Always move forward
+        st.session_state.conv_stage = "ask_education"
+        return None
+    
+    # Process education level - more flexible
+    elif current_stage == "waiting_education":
+        # Direct matches for button clicks
+        if response in ["No formal education", "Primary", "Secondary", "Higher", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["education_level"] = "Not specified"
+            else:
+                st.session_state.user_profile["education_level"] = response
+            st.session_state.conv_stage = "ask_annual_checkup"
+            return None
+            
+        education_mapping = {
+            "no": "No formal education",
+            "none": "No formal education",
+            "primary": "Primary",
+            "elementary": "Primary",
+            "secondary": "Secondary",
+            "high school": "Secondary",
+            "higher": "Higher",
+            "college": "Higher",
+            "university": "Higher",
+            "graduate": "Higher"
+        }
+        
+        # Try to match their response to a known education level
+        matched = False
+        for key, value in education_mapping.items():
+            if key in response.lower():
+                st.session_state.user_profile["education_level"] = value
+                matched = True
+                break
+        
+        # If we couldn't match, still move forward
+        if not matched:
+            if "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+                st.session_state.user_profile["education_level"] = "Not specified"
+            else:
+                # Just use their response directly
+                st.session_state.user_profile["education_level"] = response
+        
+        # Always move forward
+        st.session_state.conv_stage = "ask_annual_checkup"
+        return None
+    
+    # Process menstrual regularity
+    elif current_stage == "waiting_menstrual_regularity":
+        # Direct matches for button clicks
+        if response in ["Regular", "Irregular", "Menopause", "Not applicable", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["menstrual_regularity"] = "Not specified"
+            else:
+                st.session_state.user_profile["menstrual_regularity"] = response
+            st.session_state.conv_stage = "ask_pregnancies"
+            return None
+            
+        regularity_mapping = {
+            "regular": "Regular",
+            "irregular": "Irregular",
+            "not regular": "Irregular",
+            "menopause": "Menopause",
+            "stopped": "Menopause",
+            "no period": "Menopause",
+            "not applicable": "Not applicable",
+            "n/a": "Not applicable",
+            "na": "Not applicable"
+        }
+        
+        # Try to match their response
+        matched = False
+        for key, value in regularity_mapping.items():
+            if key in response.lower():
+                st.session_state.user_profile["menstrual_regularity"] = value
+                matched = True
+                break
+        
+        # If we couldn't match, still move forward
+        if not matched:
+            if "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+                st.session_state.user_profile["menstrual_regularity"] = "Not specified"
+            else:
+                # Use their response or mark as irregular if unclear
+                st.session_state.user_profile["menstrual_regularity"] = response
+        
+        # Always move forward
+        st.session_state.conv_stage = "ask_pregnancies"
+        return None
+    
+    # Process pregnancies
+    elif current_stage == "waiting_pregnancies":
+        # Direct matches for button clicks
+        if response in ["0", "1", "2", "3+", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["pregnancies"] = "Not specified"
+            else:
+                st.session_state.user_profile["pregnancies"] = response
+            st.session_state.conv_stage = "ask_contraceptive"
+            return None
+            
+        # Try to extract a number
+        digits = ''.join(filter(str.isdigit, response))
+        if digits:
+            st.session_state.user_profile["pregnancies"] = digits
+        elif "none" in response.lower() or "zero" in response.lower() or "0" in response:
+            st.session_state.user_profile["pregnancies"] = "0"
+        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+            st.session_state.user_profile["pregnancies"] = "Not specified"
+        else:
+            # Default to some value to continue
+            st.session_state.user_profile["pregnancies"] = response
+        
+        # Always move forward
+        st.session_state.conv_stage = "ask_contraceptive"
+        return None
+    
+    # Process contraceptive method
+    elif current_stage == "waiting_contraceptive":
+        # Direct matches for button clicks
+        if response in ["None", "Oral Pills", "IUD", "Condoms", "Sterilization", "Other", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["contraceptive_method"] = "Not specified"
+            else:
+                st.session_state.user_profile["contraceptive_method"] = response
+            st.session_state.conv_stage = "ask_complaints"
+            return None
+            
+        contraceptive_mapping = {
+            "none": "None",
+            "no": "None",
+            "don't use": "None",
+            "do not use": "None",
+            "pill": "Oral Pills",
+            "oral": "Oral Pills",
+            "iud": "IUD",
+            "intrauterine": "IUD",
+            "condom": "Condoms",
+            "barrier": "Condoms",
+            "sterilization": "Sterilization",
+            "tubes tied": "Sterilization",
+            "tubal": "Sterilization",
+            "other": "Other"
+        }
+        
+        # Try to match their response
+        matched = False
+        for key, value in contraceptive_mapping.items():
+            if key in response.lower():
+                st.session_state.user_profile["contraceptive_method"] = value
+                matched = True
+                break
+        
+        # If we couldn't match, still move forward
+        if not matched:
+            if "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+                st.session_state.user_profile["contraceptive_method"] = "Not specified"
+            else:
+                # Just use their response
+                st.session_state.user_profile["contraceptive_method"] = response
+        
+        # Always move forward
+        st.session_state.conv_stage = "ask_complaints"
+        return None
+    
+    # Process complaints (can be multiple)
+    elif current_stage == "waiting_complaints":
+        # Handle continue command
+        if response.lower() == "continue":
+            # If they click continue, move to next question
+            if "ask_annual_checkup" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_annual_checkup"
+            elif "ask_cervical_screening" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_cervical_screening"
+            else:
+                st.session_state.conv_stage = "ask_family_history"
+            return None
+        
+        # Direct match for None button
+        if response == "None":
+            st.session_state.user_profile["presenting_complaints"] = []
+            if "ask_annual_checkup" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_annual_checkup"
+            elif "ask_cervical_screening" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_cervical_screening"
+            else:
+                st.session_state.conv_stage = "ask_family_history"
+            return None
+            
+        # Direct matches for other buttons
+        if response in ["Pelvic pain", "Vaginal discharge", "Irregular bleeding", "Pain during intercourse", "Urinary issues", "Other"]:
+            if response not in st.session_state.user_profile["presenting_complaints"]:
+                st.session_state.user_profile["presenting_complaints"].append(response)
+                concerns = ", ".join(st.session_state.user_profile["presenting_complaints"])
+                return f"I've noted your health concerns: {concerns}. Do you have any other concerns? Select another or say 'Continue' to proceed."
+            else:
+                return "You've already selected this concern. Do you have any others? Select another or say 'Continue' to proceed."
+                
+        complaint_mapping = {
+            "none": "None",
+            "no": "None",
+            "nothing": "None",
+            "pain": "Pelvic pain",
+            "pelvic pain": "Pelvic pain",
+            "cramps": "Pelvic pain",
+            "discharge": "Vaginal discharge",
+            "vaginal discharge": "Vaginal discharge",
+            "bleed": "Irregular bleeding",
+            "irregular bleeding": "Irregular bleeding",
+            "spotting": "Irregular bleeding",
+            "intercourse pain": "Pain during intercourse",
+            "sex pain": "Pain during intercourse",
+            "painful sex": "Pain during intercourse",
+            "urinary": "Urinary issues",
+            "urine": "Urinary issues",
+            "bladder": "Urinary issues",
+            "other": "Other"
+        }
+        
+        # Check for "None" first
+        if any(key in response.lower() for key in ["none", "no", "nothing", "healthy"]):
+            # If None is selected, clear any existing complaints
+            st.session_state.user_profile["presenting_complaints"] = []
+            # Move to next question
+            if "ask_annual_checkup" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_annual_checkup"
+            elif "ask_cervical_screening" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_cervical_screening"
+            else:
+                st.session_state.conv_stage = "ask_family_history"
+            return None
+            
+        # Try to match their response to a known complaint
+        matched = False
+        for key, value in complaint_mapping.items():
+            if key in response.lower() and value != "None":
+                if value not in st.session_state.user_profile["presenting_complaints"]:
+                    st.session_state.user_profile["presenting_complaints"].append(value)
+                    matched = True
+        
+        if matched:
+            concerns = ", ".join(st.session_state.user_profile["presenting_complaints"])
+            return f"I've noted your health concerns: {concerns}. Do you have any other concerns? Select another or say 'Continue' to proceed."
+        else:
+            # If they mentioned something we don't recognize, just add it as "Other"
+            if "Other" not in st.session_state.user_profile["presenting_complaints"] and response.lower() not in ["skip", "prefer not", "next"]:
+                st.session_state.user_profile["presenting_complaints"].append("Other: " + response)
+                
+            # Provide option to continue
+            concerns = ", ".join(st.session_state.user_profile["presenting_complaints"])
+            if concerns:
+                return f"I've noted your health concerns: {concerns}. Do you have any other concerns? Select another or say 'Continue' to proceed."
+            else:
+                # If we couldn't match anything and they have no concerns yet, just move forward
+                if "ask_annual_checkup" in st.session_state.assessment_path:
+                    st.session_state.conv_stage = "ask_annual_checkup"
+                elif "ask_cervical_screening" in st.session_state.assessment_path:
+                    st.session_state.conv_stage = "ask_cervical_screening"
+                else:
+                    st.session_state.conv_stage = "ask_family_history"
+                return None
+    
+    # Process annual checkup response
+    elif current_stage == "waiting_annual_checkup":
+        # Direct matches for buttons
+        if response in ["Yes", "No", "Not sure"]:
+            st.session_state.user_profile["annual_checkup"] = response
+            if "ask_cervical_screening" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_cervical_screening"
+            elif "ask_breast_screening" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_breast_screening" 
+            else:
+                st.session_state.conv_stage = "ask_family_history"
+            return None
+            
+        if response.lower() == "yes" or "had" in response.lower() or "done" in response.lower():
+            st.session_state.user_profile["annual_checkup"] = "Yes"
+        elif response.lower() == "no" or "haven't" in response.lower() or "have not" in response.lower():
+            st.session_state.user_profile["annual_checkup"] = "No"
+        elif "not sure" in response.lower() or "maybe" in response.lower() or "don't know" in response.lower():
+            st.session_state.user_profile["annual_checkup"] = "Not sure"
+        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+            st.session_state.user_profile["annual_checkup"] = "Not specified"
+        else:
+            # Default to Not sure if we can't categorize
+            st.session_state.user_profile["annual_checkup"] = "Not sure"
+        
+        # Always move to next question
+        if "ask_cervical_screening" in st.session_state.assessment_path:
+            st.session_state.conv_stage = "ask_cervical_screening"
+        elif "ask_breast_screening" in st.session_state.assessment_path:
+            st.session_state.conv_stage = "ask_breast_screening" 
+        else:
+            st.session_state.conv_stage = "ask_family_history"
+        return None
+    
+    # Process cervical screening response
+    elif current_stage == "waiting_cervical_screening":
+        # Direct matches for buttons
+        if response in ["Yes", "No", "I don't know"]:
+            st.session_state.user_profile["cervical_screening"] = response
+            if "ask_breast_screening" in st.session_state.assessment_path:
+                st.session_state.conv_stage = "ask_breast_screening"
+            else:
+                st.session_state.conv_stage = "ask_family_history"
+            return None
+            
+        if response.lower() == "yes" or "had" in response.lower() or "done" in response.lower():
+            st.session_state.user_profile["cervical_screening"] = "Yes"
+        elif response.lower() == "no" or "haven't" in response.lower() or "have not" in response.lower():
+            st.session_state.user_profile["cervical_screening"] = "No"
+        elif "don't know" in response.lower() or "not sure" in response.lower() or "maybe" in response.lower():
+            st.session_state.user_profile["cervical_screening"] = "I don't know"
+        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+            st.session_state.user_profile["cervical_screening"] = "Not specified"
+        else:
+            # Default to I don't know if we can't categorize
+            st.session_state.user_profile["cervical_screening"] = "I don't know"
+        
+        # Always move to next question
+        if "ask_breast_screening" in st.session_state.assessment_path:
+            st.session_state.conv_stage = "ask_breast_screening"
+        else:
+            st.session_state.conv_stage = "ask_family_history"
+        return None
+    
+    # Process breast screening response
+    elif current_stage == "waiting_breast_screening":
+        # Direct matches for buttons
+        if response in ["Yes", "No", "I don't know"]:
+            st.session_state.user_profile["breast_screening"] = response
+            st.session_state.conv_stage = "ask_family_history"
+            return None
+            
+        if response.lower() == "yes" or "had" in response.lower() or "done" in response.lower():
+            st.session_state.user_profile["breast_screening"] = "Yes"
+        elif response.lower() == "no" or "haven't" in response.lower() or "have not" in response.lower():
+            st.session_state.user_profile["breast_screening"] = "No"
+        elif "don't know" in response.lower() or "not sure" in response.lower() or "maybe" in response.lower():
+            st.session_state.user_profile["breast_screening"] = "I don't know"
+        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+            st.session_state.user_profile["breast_screening"] = "Not specified"
+        else:
+            # Default to I don't know if we can't categorize
+            st.session_state.user_profile["breast_screening"] = "I don't know"
+        
+        # Always move to next question
+        st.session_state.conv_stage = "ask_family_history"
+        return None
+    
+    # Process family history
+    elif current_stage == "waiting_family_history":
+        # Direct matches for buttons
+        if response in ["Yes", "No", "I don't know", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["family_history_cancer"] = "Not specified"
+            else:
+                st.session_state.user_profile["family_history_cancer"] = response
+            st.session_state.conv_stage = "ask_chronic_conditions"
+            return None
+            
+        if response.lower() == "yes" or "family" in response.lower() and "history" in response.lower() and not "no" in response.lower():
+            st.session_state.user_profile["family_history_cancer"] = "Yes"
+        elif response.lower() == "no" or "don't" in response.lower() and "have" in response.lower():
+            st.session_state.user_profile["family_history_cancer"] = "No"
+        elif "don't know" in response.lower() or "not sure" in response.lower() or "maybe" in response.lower() or "uncertain" in response.lower():
+            st.session_state.user_profile["family_history_cancer"] = "I don't know"
+        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+            st.session_state.user_profile["family_history_cancer"] = "Not specified"
+        else:
+            # If we can't categorize, assume they're trying to tell us something about family history
+            st.session_state.user_profile["family_history_cancer"] = "Yes - details: " + response
+        
+        # Always move to next question
+        st.session_state.conv_stage = "ask_chronic_conditions"
+        return None
+    
+    # Process chronic conditions (can be multiple)
+    elif current_stage == "waiting_chronic_conditions":
+        # Handle continue command
+        if response.lower() == "continue":
+            st.session_state.conv_stage = "ask_lifestyle"
+            return None
+        
+        # Direct match for None button
+        if response == "None":
+            st.session_state.user_profile["chronic_conditions"] = []
+            st.session_state.conv_stage = "ask_lifestyle"
+            return None
+            
+        # Direct matches for other buttons
+        if response in ["Hypertension", "Diabetes", "Anemia", "Thyroid disorder", "STI/RTI", "Other"]:
+            if response not in st.session_state.user_profile["chronic_conditions"]:
+                st.session_state.user_profile["chronic_conditions"].append(response)
+                conditions = ", ".join(st.session_state.user_profile["chronic_conditions"])
+                return f"I've noted your conditions: {conditions}. Do you have any other conditions? Select another or say 'Continue' to proceed."
+            else:
+                return "You've already selected this condition. Do you have any others? Select another or say 'Continue' to proceed."
+            
+        condition_mapping = {
+            "none": "None",
+            "no": "None",
+            "nothing": "None",
+            "high blood pressure": "Hypertension",
+            "hypertension": "Hypertension",
+            "blood pressure": "Hypertension",
+            "sugar": "Diabetes",
+            "diabetes": "Diabetes",
+            "anemia": "Anemia",
+            "blood": "Anemia",
+            "iron": "Anemia",
+            "thyroid": "Thyroid disorder",
+            "sti": "STI/RTI",
+            "std": "STI/RTI",
+            "infection": "STI/RTI",
+            "reproductive": "STI/RTI",
+            "other": "Other"
+        }
+        
+        # Check for "None" first
+        if any(key in response.lower() for key in ["none", "no", "nothing", "healthy"]):
+            # If None is selected, clear any existing conditions
+            st.session_state.user_profile["chronic_conditions"] = []
+            st.session_state.conv_stage = "ask_lifestyle"
+            return None
+        
+        # Try to match their response to a known condition
+        matched = False
+        for key, value in condition_mapping.items():
+            if key in response.lower() and value != "None":
+                if value not in st.session_state.user_profile["chronic_conditions"]:
+                    st.session_state.user_profile["chronic_conditions"].append(value)
+                    matched = True
+        
+        if matched:
+            conditions = ", ".join(st.session_state.user_profile["chronic_conditions"])
+            return f"I've noted your conditions: {conditions}. Do you have any other conditions? Select another or say 'Continue' to proceed."
+        else:
+            # If they mentioned something we don't recognize, just add it as "Other"
+            if "Other" not in st.session_state.user_profile["chronic_conditions"] and response.lower() not in ["skip", "prefer not", "next"]:
+                st.session_state.user_profile["chronic_conditions"].append("Other: " + response)
+                
+            # Provide option to continue
+            conditions = ", ".join(st.session_state.user_profile["chronic_conditions"])
+            if conditions:
+                return f"I've noted your conditions: {conditions}. Do you have any other conditions? Select another or say 'Continue' to proceed."
+            else:
+                # If we couldn't match anything and they have no conditions yet, just move forward
+                st.session_state.conv_stage = "ask_lifestyle"
+                return None
+    
+    # Process tobacco use
+    elif current_stage == "waiting_tobacco":
+        # Direct matches for buttons
+        if response in ["Yes", "No", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["tobacco_use"] = "Not specified"
+            else:
+                st.session_state.user_profile["tobacco_use"] = response
+            st.session_state.conv_stage = "ask_alcohol"
+            return None
+            
+        if response.lower() == "yes" or "smoke" in response.lower() or "use tobacco" in response.lower():
+            st.session_state.user_profile["tobacco_use"] = "Yes"
+        elif response.lower() == "no" or "don't" in response.lower() or "do not" in response.lower():
+            st.session_state.user_profile["tobacco_use"] = "No"
+        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+            st.session_state.user_profile["tobacco_use"] = "Not specified"
+        else:
+            # Default to No if unclear
+            st.session_state.user_profile["tobacco_use"] = "No"
+        
+        # Always move to next question
+        st.session_state.conv_stage = "ask_alcohol"
+        return None
+    
+    # Process alcohol use
+    elif current_stage == "waiting_alcohol":
+        # Direct matches for buttons
+        if response in ["Yes", "No", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["alcohol_use"] = "Not specified"
+            else:
+                st.session_state.user_profile["alcohol_use"] = response
+            st.session_state.conv_stage = "ask_physical_activity"
+            return None
+            
+        if response.lower() == "yes" or "drink" in response.lower() or "alcohol" in response.lower() and not "don't" in response.lower():
+            st.session_state.user_profile["alcohol_use"] = "Yes"
+        elif response.lower() == "no" or "don't" in response.lower() or "do not" in response.lower():
+            st.session_state.user_profile["alcohol_use"] = "No"
+        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+            st.session_state.user_profile["alcohol_use"] = "Not specified"
+        else:
+            # Default to No if unclear
+            st.session_state.user_profile["alcohol_use"] = "No"
+        
+        # Always move to next question
+        st.session_state.conv_stage = "ask_physical_activity"
+        return None
+    
+    # Process physical activity
+    elif current_stage == "waiting_physical_activity":
+        # Direct matches for buttons
+        if response in ["Very active", "Moderately active", "Lightly active", "Sedentary", "Skip"]:
+            if response == "Skip":
+                st.session_state.user_profile["physical_activity"] = "Not specified"
+            else:
+                st.session_state.user_profile["physical_activity"] = response
+            st.session_state.conv_stage = "provide_recommendation"
+            return None
+            
+        activity_mapping = {
+            "very active": "Very active",
+            "very": "Very active",
+            "lot": "Very active",
+            "athlete": "Very active",
+            "moderate": "Moderately active",
+            "moderately": "Moderately active",
+            "some": "Moderately active",
+            "light": "Lightly active",
+            "lightly": "Lightly active",
+            "little": "Lightly active",
+            "not much": "Lightly active",
+            "sedentary": "Sedentary",
+            "none": "Sedentary",
+            "no": "Sedentary",
+            "don't": "Sedentary",
+            "sit": "Sedentary"
+        }
+        
+        # Try to match their response
+        matched = False
+        for key, value in activity_mapping.items():
+            if key in response.lower():
+                st.session_state.user_profile["physical_activity"] = value
+                matched = True
+                break
+        
+        # If we couldn't match, still move forward
+        if not matched:
+            if "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
+                st.session_state.user_profile["physical_activity"] = "Not specified"
+            else:
+                # Default to moderately active if unclear
+                st.session_state.user_profile["physical_activity"] = "Moderately active"
+        
+        # Always move to recommendation
+        st.session_state.conv_stage = "provide_recommendation"
+        return None
+    
+    # Process clinic info response
+    elif current_stage == "waiting_clinic_info":
+        if "yes" in response.lower() or "show" in response.lower():
+            st.session_state.show_clinic_info = True
+        else:
+            message = "No problem. If you'd like clinic information in the future, just ask. Is there anything else I can help you with today?"
+            st.session_state.conv_stage = "end"
+            return message
+    
     # Process post-visit annual wellness feedback
     elif current_stage == "waiting_annual_feedback":
         if "question" in response.lower():
@@ -771,7 +1377,7 @@ def process_user_response(response):
         else:
             # Set up for the results notification in 3-4 weeks
             st.session_state.conv_stage = "cervical_results_notification"
-            return "Great! I'll follow up with you in about 3-4 weeks with your results. In the meantime, if you have any concerns or questions, feel free to reach out to me or your healthcare provider."
+            return "Great! I'll follow up with you in about a3-4 weeks with your results. In the meantime, if you have any concerns or questions, feel free to reach out to me or your healthcare provider."
     
     # Process post-visit comprehensive screening feedback
     elif current_stage == "waiting_comprehensive_feedback":
@@ -815,7 +1421,7 @@ def process_user_response(response):
                 return "I'm glad I could share this good news with you! Continue with your regular health practices, and I'll be in touch when it's time for your next screening in 3-5 years. Feel free to contact me if you have any health questions in the meantime."
             else:
                 return "I understand. Remember that these screenings are effective at finding changes early when they're most treatable. I'll send you a reminder before your upcoming appointment. If you have any other questions or concerns before then, please don't hesitate to reach out."
-                
+    
     # Process breast results response
     elif current_stage == "waiting_breast_results_response":
         breast_result = st.session_state.test_results.get("breast", "normal")
@@ -890,440 +1496,7 @@ def process_user_response(response):
                 return "I'm glad I could share this good news with you! Continue with your regular health practices. I'll be in touch when it's time for your next screenings - cervical cancer screening in 3-5 years and breast cancer screening in 1-2 years. Feel free to contact me if you have any health questions in the meantime."
             else:
                 return "I understand. Remember that these screenings are effective at finding changes early when they're most treatable. I'll send you a reminder before your upcoming appointment(s). If you have any other questions or concerns before then, please don't hesitate to reach out."
-    
-    # Process age response
-    elif current_stage == "waiting_age":
-        try:
-            # First check if it's one of our quick reply options
-            if response in ["25-30", "31-40", "41-50", "51+"]:
-                # Parse age range and use the lower bound
-                age = int(response.split("-")[0])
-                st.session_state.user_profile["age"] = age
-                # Determine assessment path based on age
-                st.session_state.assessment_path = determine_assessment_path(age)
-                st.session_state.conv_stage = "ask_marital_status"
-                return None
-            
-            # Otherwise try to extract numbers from the response
-            digits = ''.join(filter(str.isdigit, response))
-            if digits:
-                age = int(digits)
-                if 18 <= age <= 120:  # Reasonable age range
-                    st.session_state.user_profile["age"] = age
-                    # Determine assessment path based on age
-                    st.session_state.assessment_path = determine_assessment_path(age)
-                    st.session_state.conv_stage = "ask_marital_status"
-                    return None
-            
-            # If we got here, we couldn't parse the age
-            return "I didn't understand that age. Please enter your age as a number between 18-120, or use one of the buttons below."
-        except Exception as e:
-            st.sidebar.error(f"Error processing age: {str(e)}")
-            return "There was a problem with your age input. Please try entering just the number, like '45'."
-    
-    # Process marital status
-    elif current_stage == "waiting_marital_status":
-        if response in ["Single", "Married", "Widowed", "Divorced"]:
-            st.session_state.user_profile["marital_status"] = response
-            st.session_state.conv_stage = "ask_education"
-        else:
-            return "Please select your marital status from the options provided."
-    
-    # Process education level
-    elif current_stage == "waiting_education":
-        if response in ["No formal education", "Primary", "Secondary", "Higher"]:
-            st.session_state.user_profile["education_level"] = response
-            st.session_state.conv_stage = "ask_annual_checkup"
-        else:
-            return "Please select your education level from the options provided."
-    
-    # Process menstrual regularity
-    elif current_stage == "waiting_menstrual_regularity":
-        regularity_mapping = {
-            "regular": "Regular",
-            "irregular": "Irregular",
-            "not regular": "Irregular",
-            "menopause": "Menopause",
-            "stopped": "Menopause",
-            "no period": "Menopause",
-            "not applicable": "Not applicable",
-            "n/a": "Not applicable",
-            "na": "Not applicable"
-        }
-        
-        # Try to match their response
-        matched = False
-        for key, value in regularity_mapping.items():
-            if key in response.lower():
-                st.session_state.user_profile["menstrual_regularity"] = value
-                matched = True
-                break
-        
-        # If we couldn't match, still move forward
-        if not matched:
-            if "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-                st.session_state.user_profile["menstrual_regularity"] = "Not specified"
-            else:
-                # Use their response or mark as irregular if unclear
-                st.session_state.user_profile["menstrual_regularity"] = response
-        
-        # Always move forward
-        st.session_state.conv_stage = "ask_pregnancies"
-        return None
-    
-    # Process pregnancies
-    elif current_stage == "waiting_pregnancies":
-        # Try to extract a number
-        digits = ''.join(filter(str.isdigit, response))
-        if digits:
-            st.session_state.user_profile["pregnancies"] = digits
-        elif "none" in response.lower() or "zero" in response.lower() or "0" in response:
-            st.session_state.user_profile["pregnancies"] = "0"
-        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-            st.session_state.user_profile["pregnancies"] = "Not specified"
-        else:
-            # Default to some value to continue
-            st.session_state.user_profile["pregnancies"] = response
-        
-        # Always move forward
-        st.session_state.conv_stage = "ask_contraceptive"
-        return None
-    
-    # Process contraceptive method
-    elif current_stage == "waiting_contraceptive":
-        contraceptive_mapping = {
-            "none": "None",
-            "no": "None",
-            "don't use": "None",
-            "do not use": "None",
-            "pill": "Oral Pills",
-            "oral": "Oral Pills",
-            "iud": "IUD",
-            "intrauterine": "IUD",
-            "condom": "Condoms",
-            "barrier": "Condoms",
-            "sterilization": "Sterilization",
-            "tubes tied": "Sterilization",
-            "tubal": "Sterilization",
-            "other": "Other"
-        }
-        
-        # Try to match their response
-        matched = False
-        for key, value in contraceptive_mapping.items():
-            if key in response.lower():
-                st.session_state.user_profile["contraceptive_method"] = value
-                matched = True
-                break
-        
-        # If we couldn't match, still move forward
-        if not matched:
-            if "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-                st.session_state.user_profile["contraceptive_method"] = "Not specified"
-            else:
-                # Just use their response
-                st.session_state.user_profile["contraceptive_method"] = response
-        
-        # Always move forward
-        st.session_state.conv_stage = "ask_complaints"
-        return None
-    
-    # Process complaints (can be multiple)
-    elif current_stage == "waiting_complaints":
-        complaint_mapping = {
-            "none": "None",
-            "no": "None",
-            "nothing": "None",
-            "pain": "Pelvic pain",
-            "pelvic pain": "Pelvic pain",
-            "cramps": "Pelvic pain",
-            "discharge": "Vaginal discharge",
-            "vaginal discharge": "Vaginal discharge",
-            "bleed": "Irregular bleeding",
-            "irregular bleeding": "Irregular bleeding",
-            "spotting": "Irregular bleeding",
-            "intercourse pain": "Pain during intercourse",
-            "sex pain": "Pain during intercourse",
-            "painful sex": "Pain during intercourse",
-            "urinary": "Urinary issues",
-            "urine": "Urinary issues",
-            "bladder": "Urinary issues",
-            "other": "Other"
-        }
-        
-        if response.lower() == "continue":
-            # If they click continue, move to next question
-            if "ask_annual_checkup" in st.session_state.assessment_path:
-                st.session_state.conv_stage = "ask_annual_checkup"
-            elif "ask_cervical_screening" in st.session_state.assessment_path:
-                st.session_state.conv_stage = "ask_cervical_screening"
-            else:
-                st.session_state.conv_stage = "ask_family_history"
-            return None
-            
-        # Check for "None" first
-        if any(key in response.lower() for key in ["none", "no", "nothing", "healthy"]):
-            # If None is selected, clear any existing complaints
-            st.session_state.user_profile["presenting_complaints"] = []
-            # Move to next question
-            if "ask_annual_checkup" in st.session_state.assessment_path:
-                st.session_state.conv_stage = "ask_annual_checkup"
-            elif "ask_cervical_screening" in st.session_state.assessment_path:
-                st.session_state.conv_stage = "ask_cervical_screening"
-            else:
-                st.session_state.conv_stage = "ask_family_history"
-            return None
-            
-        # Try to match their response to a known complaint
-        matched = False
-        for key, value in complaint_mapping.items():
-            if key in response.lower() and value != "None":
-                if value not in st.session_state.user_profile["presenting_complaints"]:
-                    st.session_state.user_profile["presenting_complaints"].append(value)
-                    matched = True
-        
-        if matched:
-            concerns = ", ".join(st.session_state.user_profile["presenting_complaints"])
-            return f"I've noted your health concerns: {concerns}. Do you have any other concerns? Select another or say 'Continue' to proceed."
-        else:
-            # If they mentioned something we don't recognize, just add it as "Other"
-            if "Other" not in st.session_state.user_profile["presenting_complaints"] and response.lower() not in ["skip", "prefer not", "next"]:
-                st.session_state.user_profile["presenting_complaints"].append("Other: " + response)
                 
-            # Provide option to continue
-            concerns = ", ".join(st.session_state.user_profile["presenting_complaints"])
-            if concerns:
-                return f"I've noted your health concerns: {concerns}. Do you have any other concerns? Select another or say 'Continue' to proceed."
-            else:
-                # If we couldn't match anything and they have no concerns yet, just move forward
-                if "ask_annual_checkup" in st.session_state.assessment_path:
-                    st.session_state.conv_stage = "ask_annual_checkup"
-                elif "ask_cervical_screening" in st.session_state.assessment_path:
-                    st.session_state.conv_stage = "ask_cervical_screening"
-                else:
-                    st.session_state.conv_stage = "ask_family_history"
-                return None
-    
-    # Process annual checkup response
-    elif current_stage == "waiting_annual_checkup":
-        if response.lower() == "yes" or "had" in response.lower() or "done" in response.lower():
-            st.session_state.user_profile["annual_checkup"] = "Yes"
-        elif response.lower() == "no" or "haven't" in response.lower() or "have not" in response.lower():
-            st.session_state.user_profile["annual_checkup"] = "No"
-        elif "not sure" in response.lower() or "maybe" in response.lower() or "don't know" in response.lower():
-            st.session_state.user_profile["annual_checkup"] = "Not sure"
-        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-            st.session_state.user_profile["annual_checkup"] = "Not specified"
-        else:
-            # Default to Not sure if we can't categorize
-            st.session_state.user_profile["annual_checkup"] = "Not sure"
-        
-        # Always move to next question
-        if "ask_cervical_screening" in st.session_state.assessment_path:
-            st.session_state.conv_stage = "ask_cervical_screening"
-        elif "ask_breast_screening" in st.session_state.assessment_path:
-            st.session_state.conv_stage = "ask_breast_screening" 
-        else:
-            st.session_state.conv_stage = "ask_family_history"
-        return None
-    
-    # Process cervical screening response
-    elif current_stage == "waiting_cervical_screening":
-        if response.lower() == "yes" or "had" in response.lower() or "done" in response.lower():
-            st.session_state.user_profile["cervical_screening"] = "Yes"
-        elif response.lower() == "no" or "haven't" in response.lower() or "have not" in response.lower():
-            st.session_state.user_profile["cervical_screening"] = "No"
-        elif "don't know" in response.lower() or "not sure" in response.lower() or "maybe" in response.lower():
-            st.session_state.user_profile["cervical_screening"] = "I don't know"
-        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-            st.session_state.user_profile["cervical_screening"] = "Not specified"
-        else:
-            # Default to I don't know if we can't categorize
-            st.session_state.user_profile["cervical_screening"] = "I don't know"
-        
-        # Always move to next question
-        if "ask_breast_screening" in st.session_state.assessment_path:
-            st.session_state.conv_stage = "ask_breast_screening"
-        else:
-            st.session_state.conv_stage = "ask_family_history"
-        return None
-    
-    # Process breast screening response
-    elif current_stage == "waiting_breast_screening":
-        if response.lower() == "yes" or "had" in response.lower() or "done" in response.lower():
-            st.session_state.user_profile["breast_screening"] = "Yes"
-        elif response.lower() == "no" or "haven't" in response.lower() or "have not" in response.lower():
-            st.session_state.user_profile["breast_screening"] = "No"
-        elif "don't know" in response.lower() or "not sure" in response.lower() or "maybe" in response.lower():
-            st.session_state.user_profile["breast_screening"] = "I don't know"
-        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-            st.session_state.user_profile["breast_screening"] = "Not specified"
-        else:
-            # Default to I don't know if we can't categorize
-            st.session_state.user_profile["breast_screening"] = "I don't know"
-        
-        # Always move to next question
-        st.session_state.conv_stage = "ask_family_history"
-        return None
-    
-    # Process family history
-    elif current_stage == "waiting_family_history":
-        if response.lower() == "yes" or "family" in response.lower() and "history" in response.lower() and not "no" in response.lower():
-            st.session_state.user_profile["family_history_cancer"] = "Yes"
-        elif response.lower() == "no" or "don't" in response.lower() and "have" in response.lower():
-            st.session_state.user_profile["family_history_cancer"] = "No"
-        elif "don't know" in response.lower() or "not sure" in response.lower() or "maybe" in response.lower() or "uncertain" in response.lower():
-            st.session_state.user_profile["family_history_cancer"] = "I don't know"
-        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-            st.session_state.user_profile["family_history_cancer"] = "Not specified"
-        else:
-            # If we can't categorize, assume they're trying to tell us something about family history
-            st.session_state.user_profile["family_history_cancer"] = "Yes - details: " + response
-        
-        # Always move to next question
-        st.session_state.conv_stage = "ask_chronic_conditions"
-        return None
-    
-    # Process chronic conditions (can be multiple)
-    elif current_stage == "waiting_chronic_conditions":
-        condition_mapping = {
-            "none": "None",
-            "no": "None",
-            "nothing": "None",
-            "high blood pressure": "Hypertension",
-            "hypertension": "Hypertension",
-            "blood pressure": "Hypertension",
-            "sugar": "Diabetes",
-            "diabetes": "Diabetes",
-            "anemia": "Anemia",
-            "blood": "Anemia",
-            "iron": "Anemia",
-            "thyroid": "Thyroid disorder",
-            "sti": "STI/RTI",
-            "std": "STI/RTI",
-            "infection": "STI/RTI",
-            "reproductive": "STI/RTI",
-            "other": "Other"
-        }
-        
-        if response.lower() == "continue":
-            st.session_state.conv_stage = "ask_lifestyle"
-            return None
-            
-        # Check for "None" first
-        if any(key in response.lower() for key in ["none", "no", "nothing", "healthy"]):
-            # If None is selected, clear any existing conditions
-            st.session_state.user_profile["chronic_conditions"] = []
-            st.session_state.conv_stage = "ask_lifestyle"
-            return None
-        
-        # Try to match their response to a known condition
-        matched = False
-        for key, value in condition_mapping.items():
-            if key in response.lower() and value != "None":
-                if value not in st.session_state.user_profile["chronic_conditions"]:
-                    st.session_state.user_profile["chronic_conditions"].append(value)
-                    matched = True
-        
-        if matched:
-            conditions = ", ".join(st.session_state.user_profile["chronic_conditions"])
-            return f"I've noted your conditions: {conditions}. Do you have any other conditions? Select another or say 'Continue' to proceed."
-        else:
-            # If they mentioned something we don't recognize, just add it as "Other"
-            if "Other" not in st.session_state.user_profile["chronic_conditions"] and response.lower() not in ["skip", "prefer not", "next"]:
-                st.session_state.user_profile["chronic_conditions"].append("Other: " + response)
-                
-            # Provide option to continue
-            conditions = ", ".join(st.session_state.user_profile["chronic_conditions"])
-            if conditions:
-                return f"I've noted your conditions: {conditions}. Do you have any other conditions? Select another or say 'Continue' to proceed."
-            else:
-                # If we couldn't match anything and they have no conditions yet, just move forward
-                st.session_state.conv_stage = "ask_lifestyle"
-                return None
-    
-    # Process tobacco use
-    elif current_stage == "waiting_tobacco":
-        if response.lower() == "yes" or "smoke" in response.lower() or "use tobacco" in response.lower():
-            st.session_state.user_profile["tobacco_use"] = "Yes"
-        elif response.lower() == "no" or "don't" in response.lower() or "do not" in response.lower():
-            st.session_state.user_profile["tobacco_use"] = "No"
-        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-            st.session_state.user_profile["tobacco_use"] = "Not specified"
-        else:
-            # Default to No if unclear
-            st.session_state.user_profile["tobacco_use"] = "No"
-        
-        # Always move to next question
-        st.session_state.conv_stage = "ask_alcohol"
-        return None
-    
-    # Process alcohol use
-    elif current_stage == "waiting_alcohol":
-        if response.lower() == "yes" or "drink" in response.lower() or "alcohol" in response.lower() and not "don't" in response.lower():
-            st.session_state.user_profile["alcohol_use"] = "Yes"
-        elif response.lower() == "no" or "don't" in response.lower() or "do not" in response.lower():
-            st.session_state.user_profile["alcohol_use"] = "No"
-        elif "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-            st.session_state.user_profile["alcohol_use"] = "Not specified"
-        else:
-            # Default to No if unclear
-            st.session_state.user_profile["alcohol_use"] = "No"
-        
-        # Always move to next question
-        st.session_state.conv_stage = "ask_physical_activity"
-        return None
-    
-    # Process physical activity
-    elif current_stage == "waiting_physical_activity":
-        activity_mapping = {
-            "very active": "Very active",
-            "very": "Very active",
-            "lot": "Very active",
-            "athlete": "Very active",
-            "moderate": "Moderately active",
-            "moderately": "Moderately active",
-            "some": "Moderately active",
-            "light": "Lightly active",
-            "lightly": "Lightly active",
-            "little": "Lightly active",
-            "not much": "Lightly active",
-            "sedentary": "Sedentary",
-            "none": "Sedentary",
-            "no": "Sedentary",
-            "don't": "Sedentary",
-            "sit": "Sedentary"
-        }
-        
-        # Try to match their response
-        matched = False
-        for key, value in activity_mapping.items():
-            if key in response.lower():
-                st.session_state.user_profile["physical_activity"] = value
-                matched = True
-                break
-        
-        # If we couldn't match, still move forward
-        if not matched:
-            if "skip" in response.lower() or "prefer not" in response.lower() or "next" in response.lower():
-                st.session_state.user_profile["physical_activity"] = "Not specified"
-            else:
-                # Default to moderately active if unclear
-                st.session_state.user_profile["physical_activity"] = "Moderately active"
-        
-        # Always move to recommendation
-        st.session_state.conv_stage = "provide_recommendation"
-        return None
-    
-    # Process clinic info response
-    elif current_stage == "waiting_clinic_info":
-        if "yes" in response.lower() or "show" in response.lower():
-            st.session_state.show_clinic_info = True
-        else:
-            message = "No problem. If you'd like clinic information in the future, just ask. Is there anything else I can help you with today?"
-            st.session_state.conv_stage = "end"
-            return message
-    
     # Process results response
     elif current_stage == "waiting_results_response":
         st.session_state.conv_stage = "answer_results_questions"
