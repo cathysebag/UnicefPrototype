@@ -1,3 +1,4 @@
+
 # Women's Health Navigator Chatbot - Enhanced Version
 import streamlit as st
 import openai
@@ -135,6 +136,38 @@ if 'follow_up_scheduled' not in st.session_state:
     st.session_state.follow_up_scheduled = False
 if 'next_appointment_date' not in st.session_state:
     st.session_state.next_appointment_date = None
+# Initialize clinic recommendations data
+if 'clinic_recommendations' not in st.session_state:
+    st.session_state.clinic_recommendations = {
+        "Pune": [
+            {
+                "name": "St. Mary's Health Center",
+                "address": "200 Example Road, Pune",
+                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                "phone": "123-456-7880",
+                "cost": {"cervical_cancer_screening": 0, "breast_cancer_screening": 0, "annual_checkup": 0, "treatment": 15},
+                "notes": "Free screenings available. Open Saturdays for working women."
+            },
+            {
+                "name": "Women's Wellness Clinic",
+                "address": "45 Health Avenue, Pune",
+                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                "phone": "123-555-9090",
+                "cost": {"cervical_cancer_screening": 0, "breast_cancer_screening": 0, "annual_checkup": 0, "treatment": 18},
+                "notes": "Specializes in women's health. Female doctors available."
+            }
+        ],
+        "Pipili": [
+            {
+                "name": "Pipili Community Hospital",
+                "address": "78 Main Street, Pipili",
+                "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                "phone": "987-654-3210",
+                "cost": {"cervical_cancer_screening": 5, "breast_cancer_screening": 5, "annual_checkup": 10, "treatment": 20},
+                "notes": "Limited appointment availability. Call ahead."
+            }
+        ]
+    }
 
 # Configure API key from secrets or environment
 try:
@@ -487,19 +520,19 @@ def determine_recommendations(user_profile):
     needs_breast = False
     
     # Annual wellness check recommendation
-    if user_profile["annual_checkup"] == "No" or user_profile["annual_checkup"] == "Not sure":
+    if user_profile.get("annual_checkup") == "No" or user_profile.get("annual_checkup") == "Not sure":
         needs_annual = True
         recommendations.append("an annual wellness exam")
     
     # Cervical cancer screening recommendation
     age = int(user_profile["age"]) if isinstance(user_profile["age"], int) else int(user_profile["age"].split("-")[0])
-    if age >= 30 and (user_profile["cervical_screening"] == "No" or user_profile["cervical_screening"] == "I don't know"):
+    if age >= 30 and (user_profile.get("cervical_screening") == "No" or user_profile.get("cervical_screening") == "I don't know"):
         needs_cervical = True
         if not needs_annual:
             recommendations.append("a cervical cancer screening (HPV test)")
     
     # Breast cancer screening recommendation
-    if age >= 40 and (user_profile["breast_screening"] == "No" or user_profile["breast_screening"] == "I don't know"):
+    if age >= 40 and (user_profile.get("breast_screening") == "No" or user_profile.get("breast_screening") == "I don't know"):
         needs_breast = True
         if not needs_annual:
             recommendations.append("a breast cancer screening (mammogram)")
@@ -599,9 +632,13 @@ def update_conversation():
             
             return
     
-    # Handle showing clinic information
+    # Handle showing clinic information - ensure clinic_recommendations exists
     elif current_stage == "waiting_clinic_info" and st.session_state.show_clinic_info:
         location = st.session_state.user_profile["current_location"]
+        # Ensure we have clinic recommendations data
+        if 'clinic_recommendations' not in st.session_state:
+            st.session_state.clinic_recommendations = {}
+            
         clinics = st.session_state.clinic_recommendations.get(location, [])
         
         if clinics:
@@ -687,6 +724,31 @@ def update_conversation():
     
     # Handle results questions
     elif current_stage == "answer_results_questions":
+        # Ensure clinic_recommendations exists
+        if 'clinic_recommendations' not in st.session_state:
+            st.session_state.clinic_recommendations = {}
+            
+        # Set up default clinics if needed for Pune
+        if "Pune" not in st.session_state.clinic_recommendations:
+            st.session_state.clinic_recommendations["Pune"] = [
+                {
+                    "name": "St. Mary's Health Center",
+                    "address": "200 Example Road, Pune",
+                    "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                    "phone": "123-456-7880",
+                    "cost": {"cervical_cancer_screening": 0, "breast_cancer_screening": 0, "annual_checkup": 0, "treatment": 15},
+                    "notes": "Free screenings available. Open Saturdays for working women."
+                },
+                {
+                    "name": "Women's Wellness Clinic",
+                    "address": "45 Health Avenue, Pune",
+                    "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                    "phone": "123-555-9090",
+                    "cost": {"cervical_cancer_screening": 0, "breast_cancer_screening": 0, "annual_checkup": 0, "treatment": 18},
+                    "notes": "Specializes in women's health. Female doctors available."
+                }
+            ]
+            
         clinic1 = st.session_state.clinic_recommendations["Pune"][0]
         clinic2 = st.session_state.clinic_recommendations["Pune"][1]
         
@@ -699,6 +761,23 @@ def update_conversation():
     
     # Handle location change
     elif current_stage == "handle_location_change":
+        # Ensure clinic_recommendations exists
+        if 'clinic_recommendations' not in st.session_state:
+            st.session_state.clinic_recommendations = {}
+            
+        # Set up default clinics if needed for Pipili
+        if "Pipili" not in st.session_state.clinic_recommendations:
+            st.session_state.clinic_recommendations["Pipili"] = [
+                {
+                    "name": "Pipili Community Hospital",
+                    "address": "78 Main Street, Pipili",
+                    "services": ["cervical_cancer_screening", "breast_cancer_screening", "annual_checkup"],
+                    "phone": "987-654-3210",
+                    "cost": {"cervical_cancer_screening": 5, "breast_cancer_screening": 5, "annual_checkup": 10, "treatment": 20},
+                    "notes": "Limited appointment availability. Call ahead."
+                }
+            ]
+            
         alternate_clinic = st.session_state.clinic_recommendations["Pipili"][0]
         
         message = f"Got it. In that case, I suggest you go to <span class='clinic-link'>{alternate_clinic['name']}</span>, their price is ₹{alternate_clinic['cost']['treatment']}. Note there are fewer clinics in this area so it's more expensive, and the time to get an appointment can be longer."
@@ -1377,7 +1456,7 @@ def process_user_response(response):
         else:
             # Set up for the results notification in 3-4 weeks
             st.session_state.conv_stage = "cervical_results_notification"
-            return "Great! I'll follow up with you in about a3-4 weeks with your results. In the meantime, if you have any concerns or questions, feel free to reach out to me or your healthcare provider."
+            return "Great! I'll follow up with you in about 3-4 weeks with your results. In the meantime, if you have any concerns or questions, feel free to reach out to me or your healthcare provider."
     
     # Process post-visit comprehensive screening feedback
     elif current_stage == "waiting_comprehensive_feedback":
